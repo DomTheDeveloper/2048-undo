@@ -112,6 +112,9 @@ GameManager.prototype.move = function (direction) {
   var self = this;
 
   if (direction == -1) {
+    /// randomize 
+    this.seed = Math.random();
+	
     if (this.undoStack.length > 0) {
       var prev = this.undoStack.pop();
 
