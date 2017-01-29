@@ -132,6 +132,10 @@ GameManager.prototype.move = function (direction) {
       this.actuator.continue();
       this.actuate();
     }
+	else{
+		/// restart the game if no undos left
+		game_manager.restart();
+	}
     return;
   }
 
