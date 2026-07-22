@@ -1,0 +1,69 @@
+name: Sun 2.14(ii) exact Lean audit
+
+on:
+  push:
+    branches:
+      - agent/sun214-lean-audit
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sun214-exact-audit
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout Formal Conjectures candidate
+        uses: actions/checkout@v4
+        with:
+          repository: DomTheDeveloper/formal-conjectures
+          ref: agent/sun-214-ii-dev
+          fetch-depth: 1
+
+      - name: Install elan
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
+            | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Restore Mathlib cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          lake exe cache get
+
+      - name: Compile theorem
+        shell: bash
+        run: |
+          set -euo pipefail
+          lake env lean FormalConjectures/Arxiv/1402.6641/Conjecture2_14_ii.lean \
+            2>&1 | tee sun214-audit.log
+
+      - name: Audit axioms
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > Sun214AxiomAudit.lean <<'EOF'
+          import FormalConjectures.Arxiv.«1402.6641».Conjecture2_14_ii
+          #check SunConjecture214II.conjecture_2_14_ii
+          #print axioms SunConjecture214II.conjecture_2_14_ii
+          EOF
+          lake env lean Sun214AxiomAudit.lean 2>&1 | tee -a sun214-audit.log
+          if grep -E 'sorryAx|Lean\.trustCompiler|Lean\.ofReduce' sun214-audit.log; then
+            exit 1
+          fi
+
+      - name: Upload audit transcript
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sun214-exact-audit
+          path: sun214-audit.log
+          if-no-files-found: warn
