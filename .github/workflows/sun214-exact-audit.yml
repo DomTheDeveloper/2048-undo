@@ -4,13 +4,16 @@ on:
   push:
     branches:
       - agent/sun214-lean-audit
+  pull_request:
+    branches:
+      - master
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: sun214-exact-audit
+  group: sun214-exact-audit-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
