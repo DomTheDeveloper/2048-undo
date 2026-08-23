@@ -1,0 +1,258 @@
+/* Super Mode styles for 2048-undo. */
+
+.super-panel {
+  background: #bbada0;
+  border-radius: 6px;
+  padding: 12px 14px;
+  margin-bottom: 18px;
+  color: #f9f6f2;
+}
+
+.super-row1 {
+  display: -webkit-flex;
+  display: flex;
+  -webkit-align-items: center;
+  align-items: center;
+  -webkit-justify-content: space-between;
+  justify-content: space-between;
+}
+
+.super-toggle {
+  display: inline-block;
+  background: #8f7a66;
+  border-radius: 3px;
+  padding: 8px 16px;
+  color: #f9f6f2;
+  font-weight: bold;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.super-toggle:hover { background: #9f8b77; }
+
+.super-toggle.super-on {
+  background: #f65e3b;
+  animation: super-glow 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes super-glow {
+  from { box-shadow: 0 0 4px rgba(243, 215, 116, 0.4); }
+  to   { box-shadow: 0 0 14px rgba(243, 215, 116, 0.95); }
+}
+
+.super-status {
+  font-size: 13px;
+  text-align: right;
+  margin-left: 12px;
+  line-height: 1.3;
+}
+
+.super-controls {
+  display: -webkit-flex;
+  display: flex;
+  -webkit-align-items: center;
+  align-items: center;
+  -webkit-justify-content: space-between;
+  justify-content: space-between;
+  margin-top: 10px;
+}
+
+.super-speeds {
+  display: -webkit-flex;
+  display: flex;
+  -webkit-flex-wrap: wrap;
+  flex-wrap: wrap;
+}
+
+.super-speed {
+  display: inline-block;
+  background: rgba(238, 228, 218, 0.35);
+  border-radius: 3px;
+  padding: 6px 10px;
+  margin: 2px 4px 2px 0;
+  color: #f9f6f2;
+  font-weight: bold;
+  font-size: 13px;
+  cursor: pointer;
+  text-decoration: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.super-speed:hover { background: rgba(238, 228, 218, 0.55); }
+
+.super-speed.selected {
+  background: #edc22e;
+  color: #776e65;
+}
+
+/* Corner picker: a miniature board. */
+.super-corner {
+  display: inline-block;
+  background: rgba(238, 228, 218, 0.2);
+  border-radius: 4px;
+  padding: 4px;
+  line-height: 0;
+  margin-left: 10px;
+}
+
+.super-corner-row { white-space: nowrap; }
+
+.super-corner-cell {
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  margin: 2px;
+  border-radius: 3px;
+  background: rgba(238, 228, 218, 0.35);
+  cursor: pointer;
+}
+
+.super-corner-cell:hover { background: rgba(238, 228, 218, 0.6); }
+
+.super-corner-cell.selected {
+  background: #edc22e;
+  box-shadow: inset 0 0 0 2px rgba(119, 110, 101, 0.35);
+}
+
+.super-corner-cell.disabled { cursor: default; opacity: 0.6; }
+
+.super-hud {
+  margin-top: 10px;
+  font-size: 13px;
+  display: -webkit-flex;
+  display: flex;
+  -webkit-flex-wrap: wrap;
+  flex-wrap: wrap;
+}
+
+.super-hud .super-stat {
+  margin-right: 18px;
+  white-space: nowrap;
+}
+
+.super-hud .super-stat b {
+  display: inline-block;
+  min-width: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.super-stat-undos.super-pulse {
+  animation: super-undo-pulse 0.35s ease-out;
+}
+
+@keyframes super-undo-pulse {
+  0% { color: #f65e3b; }
+  100% { color: inherit; }
+}
+
+/* The two biggest tiles get the royal treatment. */
+.tile.tile-65536 .tile-inner {
+  background: #edc22e;
+  color: #f9f6f2;
+  box-shadow: 0 0 30px 10px rgba(243, 215, 116, 0.5),
+              inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+  font-size: 30px;
+}
+
+.tile.tile-131072 .tile-inner {
+  color: #f9f6f2;
+  background: #6a5acd;
+  background: linear-gradient(135deg, #f65e3b, #edc22e, #6a5acd, #f65e3b);
+  background-size: 300% 300%;
+  animation: super-shimmer 2s linear infinite;
+  box-shadow: 0 0 40px 12px rgba(243, 215, 116, 0.7);
+  font-size: 24px;
+}
+
+@keyframes super-shimmer {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 300% 50%; }
+}
+
+@media screen and (max-width: 520px) {
+  .tile.tile-65536 .tile-inner { font-size: 15px; }
+  .tile.tile-131072 .tile-inner { font-size: 12px; }
+}
+
+/* Victory overlay, styled like the stock game-message. */
+.super-win {
+  display: none;
+  position: absolute;
+  top: 0; right: 0; bottom: 0; left: 0;
+  background: rgba(238, 228, 218, 0.85);
+  z-index: 200;
+  text-align: center;
+  border-radius: 6px;
+}
+
+.super-win.super-win-active {
+  display: block;
+  animation: fade-in 800ms ease 200ms;
+  animation-fill-mode: backwards;
+}
+
+.super-win h2 {
+  font-size: 52px;
+  font-weight: bold;
+  color: #776e65;
+  margin: 60px 0 0 0;
+  background: linear-gradient(135deg, #f65e3b, #edc22e, #6a5acd, #f65e3b);
+  background-size: 300% 300%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: super-shimmer 2s linear infinite;
+}
+
+.super-win p.super-win-sub {
+  font-size: 16px;
+  color: #776e65;
+  margin: 8px 20px 14px 20px;
+  line-height: 1.4;
+}
+
+.super-win .super-win-stats {
+  font-size: 14px;
+  color: #776e65;
+}
+
+.super-win .super-win-stats b { font-size: 16px; }
+
+.super-win .super-win-buttons { margin-top: 24px; }
+
+.super-win a {
+  display: inline-block;
+  background: #8f7a66;
+  border-radius: 3px;
+  padding: 8px 18px;
+  margin: 0 6px;
+  color: #f9f6f2;
+  font-weight: bold;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.super-win a:hover { background: #9f8b77; }
+
+@media screen and (max-width: 520px) {
+  .super-panel { padding: 10px; }
+  .super-row1 {
+    -webkit-flex-direction: column;
+    flex-direction: column;
+    -webkit-align-items: flex-start;
+    align-items: flex-start;
+  }
+  .super-status { margin: 8px 0 0 0; text-align: left; }
+  .super-controls {
+    -webkit-flex-direction: column;
+    flex-direction: column;
+    -webkit-align-items: flex-start;
+    align-items: flex-start;
+  }
+  .super-corner { margin: 8px 0 0 0; }
+  .super-win h2 { font-size: 36px; margin-top: 40px; }
+}

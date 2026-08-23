@@ -5,6 +5,7 @@
   <title>2048-undo</title>
 
   <link href="style/main.css" rel="stylesheet" type="text/css">
+  <link href="style/super.css" rel="stylesheet" type="text/css">
   <link rel="shortcut icon" href="favicon.ico">
   <link rel="apple-touch-icon" href="meta/apple-touch-icon.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -25,7 +26,46 @@
     <p class="game-intro">Join the numbers and get to the <strong>2048 tile!</strong></p>
     <p>Hit 'Z' to <a href="#" onclick="handle_undo()">take back one or more moves</a>.</p>
 
+    <div class="super-panel">
+      <div class="super-row1">
+        <a class="super-toggle"><span class="super-toggle-label">SUPER MODE</span> ⚡</a>
+        <div class="super-status">plays a perfect game to the 131072 tile, undoing every unlucky spawn</div>
+      </div>
+      <div class="super-controls">
+        <div class="super-speeds">
+          <a class="super-speed" data-speed="1">1×</a>
+          <a class="super-speed" data-speed="2">2×</a>
+          <a class="super-speed" data-speed="3">3×</a>
+          <a class="super-speed" data-speed="4">4×</a>
+          <a class="super-speed" data-speed="5">5×</a>
+          <a class="super-speed" data-speed="afap">AFAP</a>
+        </div>
+        <div class="super-corner" title="Pick the corner for the biggest tile">
+          <div class="super-corner-row"><a class="super-corner-cell" data-corner="tl"></a><a class="super-corner-cell" data-corner="tr"></a></div>
+          <div class="super-corner-row"><a class="super-corner-cell" data-corner="bl"></a><a class="super-corner-cell" data-corner="br"></a></div>
+        </div>
+      </div>
+      <div class="super-hud">
+        <span class="super-stat">moves <b class="super-stat-moves">0</b></span>
+        <span class="super-stat">undos <b class="super-stat-undos">0</b></span>
+        <span class="super-stat">time <b class="super-stat-time">0:00</b></span>
+      </div>
+    </div>
+
     <div class="game-container">
+      <div class="super-win">
+        <h2>131072</h2>
+        <p class="super-win-sub">Perfect spiral complete — capped off by a spawned&nbsp;4.<br>The highest tile 2048 allows.</p>
+        <div class="super-win-stats">
+          moves <b class="super-win-moves">0</b> ·
+          undos <b class="super-win-undos">0</b> ·
+          <b class="super-win-time">0s</b>
+        </div>
+        <div class="super-win-buttons">
+          <a class="super-win-again">Run it again</a>
+          <a class="super-win-close">Close</a>
+        </div>
+      </div>
       <div class="game-message">
         <p></p>
         <div class="lower">
@@ -85,6 +125,8 @@
   <script src="js/local_score_manager.js"></script>
   <script src="js/game_manager.js"></script>
   <script src="js/application.js"></script>
+  <script src="js/super_ai.js"></script>
+  <script src="js/super_mode.js"></script>
 
 <script>
   (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){

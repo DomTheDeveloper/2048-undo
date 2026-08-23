@@ -3,6 +3,25 @@ A small clone of [1024](https://play.google.com/store/apps/details?id=com.veewo.
 
 Made just for fun. [Play it here!](http://gabrielecirulli.github.io/2048/)
 
+### ⚡ SUPER MODE
+
+This fork's undo button re-randomizes the spawn seed, which makes something
+delightful possible: an AI that plays a *perfect* game. Hit **SUPER MODE**
+and it builds the perfect spiral — 4, 8, 16 … 65536 snaked into your chosen
+corner — undoing every unlucky spawn along the way (watch the undo counter).
+When the spiral is complete, one final 4 drops into the last free cell and
+the whole chain folds into **131072**, the highest tile 2048's rules allow.
+
+- Pick the target corner (bottom-right by default) on the mini-board.
+- Pick a speed: **1×–5×**, or **AFAP** (as fast as possible).
+- The finale always plays out in slow motion. It's the money shot.
+
+The engine (`js/super_ai.js`) is a checkpoint search over controlled
+outcomes: it plans a line of moves together with the spawn each move needs,
+plays a move, and if the random tile lands wrong it undoes and re-rolls.
+Every state on screen is a real, legal game state reached by real moves.
+`node test/run.js` drives the same engine headless as proof.
+
 ### Contributions
 
  - [TimPetricola](https://github.com/TimPetricola) added best score storage
