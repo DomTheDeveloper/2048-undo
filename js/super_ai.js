@@ -366,7 +366,10 @@
   // spawn refills the single freed cell; only its value (2 vs 4) needs
   // choosing so garbage never lines up into an accidental merge.
   function collapseSearch(b, S, memo) {
-    if (maxTile(b) >= 131072) return [];
+    // Success means 131072 ON THE CHOSEN CORNER, not merely somewhere:
+    // the final 65536+65536 merge must land at S[0].
+    if (b[S[0]] >= 131072) return [];
+    if (maxTile(b) >= 131072) return null;
     var key = b.join(",");
     if (memo.hasOwnProperty(key)) return memo[key];
     memo[key] = null; // cycle guard
