@@ -8,6 +8,23 @@
 importScripts("super_ai.js");
 
 var ai = null;
+var headless = null;
+
+// Headless mode: the ENTIRE game runs in here as matrix data — no
+// per-move round trips, no rendering. Bounded slices keep the worker
+// responsive to stop messages; progress posts a few times a second.
+function headlessTick() {
+  if (!headless) return;
+  var done = headless.run(150);
+  postMessage({
+    type: done ? "headlessDone" : "headlessProgress",
+    board: headless.board,
+    stats: headless.stats,
+    elapsed: Date.now() - headless.t0
+  });
+  if (done) { headless = null; return; }
+  setTimeout(headlessTick, 0);
+}
 
 // Answer the requested board, then prefetch one line ahead: while the
 // page replays line N, the plan for line N+1 is already computed. In
@@ -30,7 +47,8 @@ function endpointOf(board, steps) {
 onmessage = function (e) {
   var msg = e.data;
   if (msg.type === "init") {
-    ai = new Super2048.SuperAI(msg.corner, { goal: msg.goal });
+    ai = new Super2048.SuperAI(msg.corner, { goal: msg.goal,
+                                             perfect: msg.perfect });
   } else if (msg.type === "plan" && ai) {
     var plan = planAndSend(msg.board);
     if (plan.type === "line" && plan.steps.length) {
@@ -38,5 +56,15 @@ onmessage = function (e) {
     }
   } else if (msg.type === "markDead" && ai) {
     ai.markDeadEnd(msg.board);
+  } else if (msg.type === "headless") {
+    headless = new Super2048.HeadlessRunner(msg.corner, {
+      goal: msg.goal,
+      predictable: msg.predictable,
+      perfect: msg.perfect
+    });
+    headless.t0 = Date.now();
+    headlessTick();
+  } else if (msg.type === "headlessStop") {
+    headless = null;
   }
 };

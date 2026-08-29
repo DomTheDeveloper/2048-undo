@@ -479,7 +479,7 @@
         var post = sims[m];
         var spawns = spawnCells(post.board, post.ana.packedLen);
         for (var e = 0; e < spawns.length; e++) {
-          for (var vi = 0; vi < 2; vi++) {
+          for (var vi = 0; vi < opts.valueOrder.length; vi++) {
             var val = opts.valueOrder[vi];
             var nb = post.board.slice();
             nb[spawns[e]] = val;
@@ -569,6 +569,14 @@
   function SuperAI(corner, opts) {
     this.corner = corner;
     this.goal = (opts && opts.goal) === "score" ? "score" : "tile";
+    // Perfect: the move-minimal game. Mass is conserved by slides and
+    // grows only by spawns, so with every build spawn a 4 the build to
+    // the primed 131072-chain takes EXACTLY (131072-8)/4 = 32,766
+    // moves, and the collapse cascade 8,16,...,131072 adds exactly 15:
+    // 32,781 moves total, the provable minimum for this construction
+    // (the same ledger gives the known 519 for the 2048 tile). A score
+    // run ignores the flag: max score wants the opposite dial - all 2s.
+    this.perfect = !!(opts && opts.perfect) && this.goal !== "score";
     this.S = snakeCells(corner);
     this.collapseMemo = {};
     this.certMemo = {};
@@ -589,7 +597,11 @@
     o.goal = this.goal;
     // Sprint feeds 4s (twice the mass per move); a score run feeds 2s —
     // every spawned 4 forfeits the 4 points its skipped merge was worth.
-    o.valueOrder = this.goal === "score" ? [2, 4] : [4, 2];
+    // Perfect feeds ONLY 4s: a single 2 in the build would break the
+    // exact 32,781-move ledger (each pair of 2s costs one extra move).
+    o.valueOrder = this.goal === "score" ? [2, 4]
+                 : this.perfect ? [4]
+                 : [4, 2];
     return o;
   };
 
@@ -730,7 +742,10 @@
       }
       var cells = this.grid.availableCells();
       if (!cells.length) return;
-      var value = Math.random() < 0.9 ? 2 : 4;
+      // A perfect game is all 4s from the very first two tiles: a
+      // stray 2 could never merge again (no partner will ever spawn)
+      // and would poison the board for good.
+      var value = self.ai.perfect ? 4 : (Math.random() < 0.9 ? 2 : 4);
       var cell = cells[(Math.random() * cells.length) | 0];
       this.grid.insertTile(new Tile(cell, value));
       self.lastSpawn = { x: cell.x, y: cell.y, value: value };
@@ -930,9 +945,142 @@
     return rows.slice(0, limit || 12);
   }
 
+  // ------------------------------------------------------------------
+  // Headless runner: no GUI, no GameManager — pure matrix data
+  // ------------------------------------------------------------------
+
+  // The whole game as flat 16-element arrays: the planner, the moves,
+  // the 90/10 spawn odds and the undo re-rolls all happen in here. No
+  // DOM, no tile objects, no frames to wait for — the only cost left
+  // is the planner itself. run(ms) advances in bounded slices so the
+  // host (the web worker, a Node script) can stay responsive and
+  // report progress between slices.
+  function HeadlessRunner(corner, options) {
+    options = options || {};
+    this.S = snakeCells(corner);
+    this.ai = new SuperAI(corner, { goal: options.goal,
+                                    perfect: options.perfect });
+    this.goal = this.ai.goal;
+    this.predictable = !!options.predictable;
+    this.stats = { moves: 0, attempts: 0, undos: 0, backtracks: 0,
+                   restarts: 0, score: 0 };
+    this.board = this.freshBoard();
+    this.hist = [];
+    this.backStep = 4;
+    this.unwinding = false;
+    this.bestPhi = -1;
+    this.done = false;
+  }
+
+  HeadlessRunner.prototype.freshBoard = function () {
+    var b = [];
+    for (var i = 0; i < CELLS; i++) b.push(0);
+    this.spawnRandom(b);
+    this.spawnRandom(b);
+    return b;
+  };
+
+  HeadlessRunner.prototype.spawnRandom = function (b) {
+    var empt = emptyCells(b);
+    if (!empt.length) return;
+    b[empt[(Math.random() * empt.length) | 0]] =
+      this.ai.perfect ? 4 : (Math.random() < 0.9 ? 2 : 4);
+  };
+
+  HeadlessRunner.prototype.goalDone = function (b) {
+    if (this.goal !== "score") return maxTile(b) >= 131072;
+    return maxTile(b) >= 131072 && boardDead(b);
+  };
+
+  // Commit one planned spawn. Predictable mode places it; super mode
+  // pays for it honestly — uniform cell over the empties, 90/10 value,
+  // one simulated undo re-roll per miss. Identical distribution, same
+  // expected number of undos as driving the real game.
+  HeadlessRunner.prototype.place = function (step, post) {
+    if (this.predictable) { this.stats.attempts++; return; }
+    var empt = 0;
+    for (var i = 0; i < CELLS; i++) if (post[i] === 0) empt++;
+    var pWant = step.value === 2 ? 0.9 : 0.1;
+    var attempts = 1;
+    while (!(((Math.random() * empt) | 0) === 0 && Math.random() < pWant)) {
+      attempts++;
+    }
+    this.stats.attempts += attempts;
+    this.stats.undos += attempts - 1;
+  };
+
+  // Advance for about `ms` milliseconds. Returns true once the goal
+  // board is reached; this.board / this.stats carry the live state.
+  HeadlessRunner.prototype.run = function (ms) {
+    var until = Date.now() + (ms || 100);
+    while (!this.done && Date.now() < until) {
+      var b = this.board;
+      if (this.goalDone(b)) { this.done = true; break; }
+
+      var plan = this.ai.plan(b);
+      if (plan.type === "done") { this.done = true; break; }
+
+      if (plan.type === "stuck") {
+        // Mirror the driver's undo-backtracking on the plain history.
+        if (!this.hist.length) {
+          this.stats.restarts++;
+          this.board = this.freshBoard();
+          this.unwinding = false;
+          this.backStep = 4;
+          continue;
+        }
+        var back;
+        if (this.unwinding) {
+          back = 1;
+        } else {
+          this.ai.markDeadEnd(b);
+          back = Math.min(this.backStep, this.hist.length);
+          this.backStep = Math.min(this.backStep * 2, 512);
+          this.stats.backtracks++;
+          this.unwinding = true;
+        }
+        while (back-- > 0 && this.hist.length) {
+          this.board = this.hist.pop();
+          this.stats.undos++;
+        }
+        // Skip planning on obviously wrecked mid-line intermediates —
+        // except in a score run's second act, where stranded tiles are
+        // the normal look of a perfectly plannable board.
+        if (!(this.goal === "score" && this.board[this.S[0]] >= 131072)) {
+          while (this.hist.length &&
+                 analyze(this.board, this.S, true).stranded) {
+            this.board = this.hist.pop();
+            this.stats.undos++;
+          }
+        }
+        continue;
+      }
+
+      for (var i = 0; i < plan.steps.length; i++) {
+        var step = plan.steps[i];
+        this.hist.push(this.board);
+        if (this.hist.length > 600) this.hist.splice(0, 100);
+        var sim = simMove(this.board, step.dir);
+        for (var mg = 0; mg < sim.merges.length; mg++) {
+          this.stats.score += sim.merges[mg];
+        }
+        this.place(step, sim.board);
+        sim.board[step.cell] = step.value;
+        this.board = sim.board;
+        this.stats.moves++;
+        this.unwinding = false;
+        var phi = analyze(this.board, this.S, true).prefixPhi;
+        if (phi > this.bestPhi) { this.bestPhi = phi; this.backStep = 4; }
+      }
+    }
+    if (!this.done && this.goalDone(this.board)) this.done = true;
+    return this.done;
+  };
+
   var api = {
     SuperAI: SuperAI,
     SuperDriver: SuperDriver,
+    HeadlessRunner: HeadlessRunner,
     snakeCells: snakeCells,
     simMove: simMove,
     analyze: analyze,

@@ -13,15 +13,23 @@ When the spiral is complete, one final 4 drops into the last free cell and
 the whole chain folds into **131072**, the highest tile 2048's rules allow.
 
 - Pick the target corner (bottom-right by default) on the mini-board.
-- Pick a speed: **1×–5×**, or **AFAP** (as fast as possible).
+- Pick a speed: **1×–5×**, **AFAP** (as fast as possible), or
+  **🧮 HEADLESS** — no rendering at all: the *entire* game (planner,
+  moves, spawn odds, undo re-rolls) runs as flat arrays inside the Web
+  Worker. The page just shows a live counter and an occasional board
+  snapshot, then installs the final position into the real game. Because
+  nothing depends on animation frames, it runs at full speed even in a
+  hidden background tab, where browsers throttle rendered modes to a
+  crawl.
 - Pick a flavor:
   - **🎲 SUPER** — spawns stay honest (90% twos, random cells); every
     unlucky one gets undone and re-rolled. About 1.8 million undos per
     perfect game.
   - **🔮 PREDICTABLE** — the AI decides which tile comes next *and where
-    it lands*, choosing the placement that finishes fastest. Zero undos,
-    zero luck: every move within ~12% of the 32,767-move lower bound that
-    mass arithmetic allows.
+    it lands*. Zero undos, zero luck.
+  - **👑 PERFECT** — the move-minimal game: every spawn from the very
+    first two tiles is a 4, and the run finishes in **exactly 32,781
+    moves** — the provable minimum (derivation below).
 - The finale always plays out in slow motion. It's the money shot.
 
 And a goal picker:
@@ -61,8 +69,61 @@ re-rolls cost 0.1s — about 18 million engine steps per second); ~99.99%
 of the time is the planner thinking. That's also why the undo and
 perfect rulesets finish in a dead heat, and why an honest game — no
 undo, no control — tops out around 2048: perfection needs the re-roll.
-Move counts sit within ~12% of the 32,767-move lower bound that mass
-arithmetic imposes (each move adds at most 4 mass; 131,068 is needed).
+
+### 👑 The mathematics of a perfect game
+
+Slides conserve tile mass (2+2 → 4), so the board's total only ever
+grows by spawns — one per move, +4 or +2. That single invariant decides
+everything.
+
+**Fewest moves to 131072.** Right before the final merge the board must
+hold two 65536s plus whatever junk arrived along the way, so every move
+should carry the maximum +4. Feeding *only* 4s, and starting from two
+4s (mass 8), the build of the primed spiral — the full descending chain
+65536 … 4 plus one spawned 4 in the last cell, total mass exactly
+131072 — takes **exactly (131072 − 8) / 4 = 32,766 moves**, no matter
+what order the merges happen in. Then the spiral folds: the cascade
+8, 16, 32, … 131072 is 15 forced merges, one per move (a slide merges
+equal *adjacent* pairs only, and the chain offers exactly one per
+step). Total:
+
+> **minMoves(2^n) = (2^n − 8)/4 + (n − 2)**, so
+> **minMoves(131072) = 32,766 + 15 = 32,781 = 2^15 + 13.**
+
+The same formula gives **519** for the 2048 tile (510 + 9) — exactly
+the known minimum from Lees-Miller's Markov-chain analysis of 2048,
+which also puts honest random play at ~939 moves on average. Every 2
+that sneaks into a build costs half a move (a pair of 2s is one extra
+move), which is why plain PREDICTABLE runs land ~36,900: they allow 2s
+whenever convenient, roughly 8,200 of them. PERFECT allows none — and
+because a lone 2 could never merge again in an all-4 world, even the
+two starting tiles must be 4s.
+
+**Highest score, fewest moves.** Score is merge history: building 2^k
+entirely from 2s banks (k−1)·2^k points, and every spawned 4 skips a
+2+2 merge, forfeiting exactly 4 points. The maximum-score death board
+is the full descending chain 131072, 65536, … 4 filling all 16 cells,
+worth Σₖ₌₂¹⁷ (k−1)·2^k = 3,932,164 points — minus 8 for the two
+structurally forced 4-spawns (each lands in a last free cell where no
+partner 2 could ever join it): **3,932,156**. The same mass ledger
+prices that game at about **131,066 moves** — four times the sprint,
+because 2-feeds carry half the mass.
+
+So the two perfections pull the same lever opposite ways: **spawn 4s
+for the fewest moves, spawn 2s for the most points.** One dial, both
+extremes, and SUPER MODE plays each of them to its bound.
+
+`PERFECT=1 node test/run.js br` proves the move count: the harness
+asserts the surviving line is exactly 32,781 moves.
+
+References: [The Mathematics of 2048: Minimum Moves to Win with Markov
+Chains](https://jdlm.info/articles/2017/08/05/markov-chain-2048.html)
+(519 minimum, ~939 average), [Optimal Play with Markov Decision
+Processes](https://jdlm.info/articles/2018/03/18/markov-decision-process-2048.html),
+[Threes!, Fives, 1024!, and 2048 are Hard](https://arxiv.org/abs/1505.04274),
+[Computational bounds for the 2048 game](https://arxiv.org/abs/2303.07266),
+and the community derivations of the maximum score (e.g. [Ask
+MetaFilter](https://ask.metafilter.com/269599/In-a-2048-or-Threes-like-game-what-is-the-highest-possible-score)).
 
 ### Contributions
 

@@ -301,3 +301,9 @@
   .super-corner { margin: 8px 0 0 0; }
   .super-win h2 { font-size: 36px; margin-top: 40px; }
 }
+
+/* Headless: a different kind of fast — pure data, no rendering. */
+.super-speed-headless.selected {
+  background: #6f5bd6;
+  color: #f9f6f2;
+}

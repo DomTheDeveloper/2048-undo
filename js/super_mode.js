@@ -29,7 +29,9 @@
     plannerBusySince: 0,
     requestedKey: null,
     savedProtoMove: null,
-    savedProtoRestart: null
+    savedProtoRestart: null,
+    headless: null,
+    headlessLastRender: 0
   };
 
   function $(sel) { return document.querySelector(sel); }
@@ -100,8 +102,114 @@
     return BASE_MPS * parseInt(controller.speed, 10);
   }
 
+  // ----------------------------------------------------------------
+  // Headless: the whole game runs in the worker as matrix data — no
+  // rendering per move, no round trips, no frame budget. The page just
+  // shows a live counter and an occasional board snapshot, and installs
+  // the final position into the real game at the end. Full speed even
+  // in a background tab (rAF throttling can't touch a worker).
+  // ----------------------------------------------------------------
+
+  function buildGrid(board, still) {
+    var grid = new Grid(4);
+    for (var i = 0; i < 16; i++) {
+      if (!board[i]) continue;
+      var t = new Tile({ x: i % 4, y: (i / 4) | 0 }, board[i]);
+      if (still) t.previousPosition = { x: t.x, y: t.y }; // no pop-in
+      grid.insertTile(t);
+    }
+    return grid;
+  }
+
+  function renderSnapshot(board, score) {
+    var g = gm();
+    g.actuator.actuate(buildGrid(board, true), {
+      score: score, over: false, won: false,
+      bestScore: g.scoreManager.get(), terminated: false
+    });
+  }
+
+  function installBoard(board, score) {
+    var g = gm();
+    controller.aiActing = true;
+    g.grid = buildGrid(board, false);
+    g.score = score;
+    g.won = Super.maxTile(board) >= 2048;
+    g.keepPlaying = true;
+    g.over = false;
+    g.undoStack.length = 0; // the history lived in the worker, not here
+    controller.aiActing = false;
+    render();
+  }
+
+  function startHeadless() {
+    var g = gm();
+    if (!g) return;
+    var worker = null;
+    try { worker = new Worker("js/super_worker.js"); } catch (e) { worker = null; }
+    if (!worker) {
+      // No workers here (e.g. file://): headless can't run in the
+      // background, so fall back to the fastest rendered mode.
+      controller.speed = "afap";
+      savePref("super2048.speed", controller.speed);
+      updateControls();
+      startRun();
+      return;
+    }
+
+    controller.running = true;
+    controller.finale = false;
+    controller.done = false;
+    controller.startedAt = Date.now();
+    controller.driver = null;
+    controller.headless = { stats: { moves: 0, attempts: 0, undos: 0, score: 0 },
+                            board: null, elapsed: 0 };
+    controller.headlessLastRender = 0;
+    controller.worker = worker;
+
+    installHooks();
+    hideWinOverlay();
+
+    worker.onmessage = function (e) {
+      var msg = e.data;
+      if (!controller.running) return;
+      if (msg.type !== "headlessProgress" && msg.type !== "headlessDone") return;
+      controller.headless = { stats: msg.stats, board: msg.board,
+                              elapsed: msg.elapsed };
+      if (msg.type === "headlessDone") {
+        installBoard(msg.board, msg.stats.score);
+        controller.done = true;
+        showWinOverlay();
+        stopRun("won");
+        return;
+      }
+      var now = Date.now();
+      if (now - controller.headlessLastRender > 120) {
+        controller.headlessLastRender = now;
+        renderSnapshot(msg.board, msg.stats.score);
+      }
+      updateHud(false);
+    };
+    worker.onerror = function () {
+      setStatus("worker error — headless run stopped");
+      stopRun("error");
+    };
+    worker.postMessage({ type: "headless", corner: controller.corner,
+                         goal: controller.goal,
+                         predictable: controller.mode !== "super",
+                         perfect: controller.mode === "perfect" });
+
+    document.body.classList.add("super-running");
+    updateControls();
+    // Just keep the clock ticking; progress messages drive everything else.
+    controller.pumpId = setInterval(function () {
+      if (controller.running) updateHud(false);
+    }, 500);
+  }
+
   function startRun() {
     if (controller.running) return;
+    if (controller.speed === "headless") { startHeadless(); return; }
     var g = gm();
     if (!g) return;
 
@@ -111,6 +219,7 @@
     controller.startedAt = Date.now();
     controller.lastTick = 0;
     controller.moveDebt = 0;
+    controller.headless = null;
 
     installHooks();
     hideWinOverlay();
@@ -124,7 +233,8 @@
     try {
       controller.worker = new Worker("js/super_worker.js");
       controller.worker.postMessage({ type: "init", corner: controller.corner,
-                                      goal: controller.goal });
+                                      goal: controller.goal,
+                                      perfect: controller.mode === "perfect" });
       controller.planStore = {};
       controller.worker.onmessage = function (e) {
         var msg = e.data;
@@ -152,7 +262,8 @@
     g.undoStack.length = 0;        // a fresh run keeps its own history
     g.restart();
     controller.driver = new Super.SuperDriver(g, controller.corner, Tile, {
-      predictable: controller.mode === "predictable",
+      predictable: controller.mode !== "super",
+      perfect: controller.mode === "perfect",
       goal: controller.goal,
       externalPlanner: !!controller.worker,
       onDeadEnd: function (board) {
@@ -181,6 +292,12 @@
     controller.rafId = controller.pumpId = null;
     if (controller.worker) { controller.worker.terminate(); controller.worker = null; }
     if (controller.driver) controller.driver.detach();
+    if (controller.headless && controller.headless.board && why !== "won") {
+      // Stopped mid-headless-run: keep what it reached — install the
+      // last snapshot as the real game state (no undo history; the
+      // moves lived in the worker).
+      installBoard(controller.headless.board, controller.headless.stats.score);
+    }
     removeHooks();
     document.body.classList.remove("super-running");
     render();
@@ -293,11 +410,13 @@
 
   function updateHud(justWon) {
     var d = controller.driver;
-    if (!d) return;
-    $(".super-stat-moves").textContent = fmtInt(d.stats.moves);
+    var hs = controller.headless;
+    var st = d ? d.stats : (hs && hs.stats);
+    if (!st) return;
+    $(".super-stat-moves").textContent = fmtInt(st.moves);
     var undoEl = $(".super-stat-undos");
     var prev = undoEl.textContent;
-    var next = fmtInt(d.stats.undos);
+    var next = fmtInt(st.undos);
     if (prev !== next) {
       undoEl.textContent = next;
       undoEl.classList.remove("super-pulse");
@@ -314,13 +433,26 @@
         : "131072 — perfect spiral complete!");
     } else if (controller.finale) {
       setStatus("FINALE — folding the spiral into 131072…");
+    } else if (controller.running && !d && hs) {
+      var hmax = hs.board ? Super.maxTile(hs.board) : 0;
+      var mps = hs.elapsed > 500
+        ? " at " + fmtInt(Math.round(st.moves / (hs.elapsed / 1000))) + " moves/s"
+        : "";
+      setStatus("headless — pure data, no rendering" + mps +
+        " — largest tile " + fmtInt(hmax) +
+        (controller.goal === "score"
+          ? " — score " + fmtInt(st.score) + " / 3,932,156"
+          : controller.mode === "perfect"
+          ? " — move " + fmtInt(st.moves) + " of 32,781" : ""));
     } else if (controller.running) {
       var thinking = controller.plannerBusySince &&
         Date.now() - controller.plannerBusySince > 400;
       var max = Super.maxTile(d.readBoard());
       var progress = controller.goal === "score"
         ? "score " + fmtInt(gm().score) + " / 3,932,156 — largest tile " + fmtInt(max)
-        : "building the spiral — largest tile " + fmtInt(max);
+        : (controller.mode === "perfect"
+            ? "move " + fmtInt(d.stats.moves - d.stats.undos) + " of 32,781 — "
+            : "building the spiral — ") + "largest tile " + fmtInt(max);
       setStatus((thinking ? "thinking… — " : "") + progress +
         (controller.mode === "predictable" ? " (spawns by design)" : ""));
     }
@@ -346,12 +478,17 @@
       el.classList.toggle("disabled", controller.running);
     });
     if (!controller.running && !controller.done) {
-      var how = controller.mode === "predictable"
+      var how = controller.mode === "perfect"
+        ? "all-4 feeding: the mathematical minimum of 32,781 moves"
+        : controller.mode === "predictable"
         ? "it decides every next tile and where it lands"
         : "undoing every unlucky spawn along the way";
       setStatus(controller.goal === "score"
-        ? "maximum-score run to 3,932,156 — " + how
-        : "perfect game to 131072 — " + how);
+        ? "maximum-score run to 3,932,156 — " +
+          (controller.mode === "perfect"
+            ? "all-2 feeding is what perfect means here" : how)
+        : (controller.mode === "perfect"
+            ? "move-minimal game to 131072 — " : "perfect game to 131072 — ") + how);
     }
   }
 
@@ -361,11 +498,15 @@
   }
 
   function showWinOverlay() {
-    var d = controller.driver;
+    var st = controller.driver ? controller.driver.stats
+                               : controller.headless.stats;
     var el = $(".super-win");
-    var how = controller.mode === "predictable"
+    var how = controller.mode === "perfect"
+      ? "in the mathematically minimal number of moves"
+      : controller.mode === "predictable"
       ? "every tile chosen and placed by design"
       : "capped off by a spawned&nbsp;4";
+    if (controller.speed === "headless") how += ", all as pure matrix data";
     if (controller.goal === "score") {
       $(".super-win h2").textContent = fmtInt(gm().score);
       $(".super-win-sub").innerHTML =
@@ -376,8 +517,8 @@
       $(".super-win-sub").innerHTML = "Perfect spiral complete — " + how +
         ".<br>The highest tile 2048 allows.";
     }
-    $(".super-win-moves").textContent = fmtInt(d.stats.moves);
-    $(".super-win-undos").textContent = fmtInt(d.stats.undos);
+    $(".super-win-moves").textContent = fmtInt(st.moves);
+    $(".super-win-undos").textContent = fmtInt(st.undos);
     var secs = Math.floor((Date.now() - controller.startedAt) / 1000);
     $(".super-win-time").textContent =
       Math.floor(secs / 60) + "m " + (secs % 60) + "s";
@@ -397,7 +538,12 @@
     $all(".super-speed").forEach(function (el) {
       el.addEventListener("click", function (e) {
         e.preventDefault();
-        controller.speed = el.getAttribute("data-speed");
+        var next = el.getAttribute("data-speed");
+        // Rendered speeds swap freely mid-run; headless is a different
+        // execution mode, so crossing that line needs a fresh start.
+        if (controller.running &&
+            (next === "headless") !== (controller.speed === "headless")) return;
+        controller.speed = next;
         savePref("super2048.speed", controller.speed);
         updateControls();
       });

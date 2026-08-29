@@ -64,9 +64,11 @@ function runCorner(corner) {
   var gm = game.gm;
 
   var goal = process.env.GOAL === "score" ? "score" : "tile";
+  var perfect = process.env.PERFECT === "1";
   var driver = new Super.SuperDriver(gm, corner, game.Tile,
     { verify: true, trace: process.env.TRACE === "1",
-      predictable: process.env.PREDICTABLE === "1",
+      predictable: process.env.PREDICTABLE === "1" || perfect,
+      perfect: perfect,
       goal: goal });
   driver.attach();
   gm.restart(); // fresh board through the patched spawner
@@ -161,6 +163,16 @@ function runCorner(corner) {
       " (ceiling 3,932,156)  dead=" + dead);
   } else {
     ok = b[S[0]] === 131072;
+    if (perfect) {
+      // The mass ledger makes this a theorem, not a hope: with every
+      // build spawn a 4, the surviving line is exactly 32,766 build
+      // moves + 15 collapse moves. (Undone moves don't count; in
+      // predictable play every undo removed one accepted move.)
+      var net = driver.stats.moves - driver.stats.undos;
+      console.log("[" + corner + "] perfect-goal: net moves=" + net +
+        " (theoretical minimum 32,781)");
+      ok = ok && net === 32781;
+    }
   }
   console.log("[" + corner + "] DONE in " + ((Date.now() - t0) / 1000).toFixed(1) + "s" +
     "  moves=" + driver.stats.moves +
