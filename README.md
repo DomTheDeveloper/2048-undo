@@ -24,6 +24,16 @@ the whole chain folds into **131072**, the highest tile 2048's rules allow.
     mass arithmetic allows.
 - The finale always plays out in slow motion. It's the money shot.
 
+And a goal picker:
+
+- **🏁 131072 SPRINT** — straight to the tile, 4-feeds, done.
+- **💯 MAX SCORE** — score is merge history: a spawned 2 is worth 0 and
+  every spawned 4 forfeits 4 points. So this run feeds twos only, and
+  after folding the first spiral into 131072 it *keeps playing*,
+  stacking the full descending chain 65536, 32768, … beside it until the
+  board dies full and mergeless at the theoretical ceiling of
+  **3,932,156 points**.
+
 The engine (`js/super_ai.js`) is a checkpoint search over controlled
 outcomes: it plans a line of moves together with the spawn each move
 needs, then either re-rolls reality until it matches (super) or simply
@@ -31,8 +41,28 @@ places the planned tile (predictable). Every state on screen is a real,
 legal game state reached by real moves. All searching runs in a Web
 Worker (`js/super_worker.js`), one line prefetched ahead, so the page
 stays at 60fps even while the planner thinks hard.
-`node test/run.js` drives the same engine headless as proof
-(`PREDICTABLE=1` for the controlled-spawn mode).
+
+`node test/run.js [corner]` drives the same engine headless as proof
+(`PREDICTABLE=1` for controlled spawns, `GOAL=score` for the max-score
+run), and `node test/bench.js {standard|undo|perfect}` is a pure-array
+speed benchmark of the three rulesets. Measured on one 4-core box, all
+four runs below executing **simultaneously** (one core each):
+
+| run | result | moves | undo re-rolls | wall time | planning | engine |
+|---|---|---|---|---|---|---|
+| bench, undo rules | 131072 | 36,561 | 1,798,095 | 22.9 min | 1376.1s | 0.1s |
+| bench, perfect rules | 131072 | 36,569 | 0 | 22.7 min | 1364.6s | 0.0s |
+| real engine, predictable | 131072 | 36,561 | 0 | 23.0 min | — | — |
+| real engine, super | 131072 | 36,563 | 1,785,117 | 23.0 min | — | — |
+| honest expectimax (no undo, no control) | 1024–2048 | — | — | ~2s/game | — | — |
+
+The story the numbers tell: the board engine is effectively free (1.8M
+re-rolls cost 0.1s — about 18 million engine steps per second); ~99.99%
+of the time is the planner thinking. That's also why the undo and
+perfect rulesets finish in a dead heat, and why an honest game — no
+undo, no control — tops out around 2048: perfection needs the re-roll.
+Move counts sit within ~12% of the 32,767-move lower bound that mass
+arithmetic imposes (each move adds at most 4 mass; 131,068 is needed).
 
 ### Contributions
 
