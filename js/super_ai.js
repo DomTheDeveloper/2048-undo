@@ -205,19 +205,27 @@
     // sitting in front of the train spatially blocks both the train's
     // march and the tail's feeding. The sole exception is the very last
     // snake cell — nothing can ever spawn behind it, so a train tile
-    // parked there tolerates smalls in front. And while the corner cell
-    // itself is empty (a column pump has the whole structure in flight)
-    // snake order among floats means nothing — the drop that follows
-    // re-sorts every column — so the rule is suspended.
-    var airborne = b[S[0]] === 0;
+    // parked there tolerates smalls in front. Everything past the first
+    // EMPTY snake cell is a different country though: that's the
+    // workshop, where the feed cycle builds each next tile out of
+    // spawns — construction is order-increasing by nature, and a column
+    // pump's in-flight structure re-sorts on the drop anyway — so no
+    // order is enforced out there.
     var trainPrev = -1;
     var inSmalls = false;
+    var workshop = false;
     for (var j = packedLen; j < CELLS; j++) {
       var jv = b[S[j]];
-      if (jv === 0) continue;
+      if (jv === 0) { workshop = true; continue; }
       if (jv <= 4) { floats++; inSmalls = true; continue; }
+      if (workshop) {
+        floats++;
+        train++;
+        bigMass += jv;
+        continue;
+      }
       var limit = trainPrev >= 0 ? trainPrev : headOK;
-      if (jv <= limit && (!inSmalls || airborne || j === CELLS - 1)) {
+      if (jv <= limit && (!inSmalls || j === CELLS - 1)) {
         floats++;
         train++;
         bigMass += jv;
@@ -350,16 +358,21 @@
       return false;
     }
 
-    // No resting on a board whose big tiles float past a hole: every
-    // tile >= 8 must sit on a fully occupied snake prefix. A vacated
-    // cell underneath the structure means the only compacting moves
-    // slide the corner row — a parked position with no way back.
+    // No resting on a board whose structure floats past holes: vacated
+    // cells underneath real mass mean the only compacting moves slide
+    // the corner row — a parked position with no way back. Feed 8s roam
+    // free (the cycle mints them mid-board, often past a hole, since
+    // half the rows pack away from the snake), and ONE tile >= 16 may
+    // be in flight out there too — a catch-up builds each doubling in
+    // the feed zone and docks it before minting the next. Two or more
+    // is not a catch-up; it's structure resting on air.
     function snakeCompact(nb) {
-      var holeAt = -1;
+      var hole = false;
+      var out = 0;
       for (var i = 0; i < CELLS; i++) {
         var v = nb[S[i]];
-        if (v === 0) { if (holeAt < 0) holeAt = i; continue; }
-        if (v >= 8 && holeAt >= 0) return false;
+        if (v === 0) { hole = true; continue; }
+        if (hole && v >= 16 && ++out > 1) return false;
       }
       return true;
     }
@@ -413,7 +426,7 @@
       return healing && gained > 0 &&
              ana.stranded <= start.stranded &&
              ana.bigMass >= start.bigMass &&
-             extras - ana.train <= (startLoose > 2 ? startLoose : 2) &&
+             extras - ana.train <= (startLoose > 3 ? startLoose : 3) &&
              misplacedOf(nb) <= (startMisplaced > 1 ? startMisplaced : 1) &&
              snakeCompact(nb) &&
              continuable(nb, 1e9);
