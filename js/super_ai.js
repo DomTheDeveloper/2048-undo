@@ -136,6 +136,7 @@
   //   stranded - any tile >= 8 outside the packed chain (real damage)
   function analyze(b, S, loose) {
     var prefixPhi = 0;
+    var bigMass = 0;
     var prev = Infinity;
     var pairUsed = false;
     var pairAt = -1;
@@ -152,6 +153,11 @@
         pairAt = packedLen;
       }
       prefixPhi += v * W[packedLen];
+      // The big-structure mass: feed smalls churn constantly, but the
+      // >= 8 backbone (walk + docked train) only changes on structural
+      // events, and merges within it preserve it exactly — the right
+      // invariant to hold while a line rummages through the board.
+      if (v >= 8) bigMass += v;
       prev = v;
       packedLen++;
     }
@@ -182,6 +188,7 @@
     var floats = 0;
     var leaked = 0;
     var stranded = 0;
+    var train = 0;
     var residueStart = -1;
     var residueEnd = -1;
     // The train ultimately slots in beneath the chain value ABOVE the
@@ -198,7 +205,11 @@
     // sitting in front of the train spatially blocks both the train's
     // march and the tail's feeding. The sole exception is the very last
     // snake cell — nothing can ever spawn behind it, so a train tile
-    // parked there tolerates smalls in front.
+    // parked there tolerates smalls in front. And while the corner cell
+    // itself is empty (a column pump has the whole structure in flight)
+    // snake order among floats means nothing — the drop that follows
+    // re-sorts every column — so the rule is suspended.
+    var airborne = b[S[0]] === 0;
     var trainPrev = -1;
     var inSmalls = false;
     for (var j = packedLen; j < CELLS; j++) {
@@ -206,8 +217,10 @@
       if (jv === 0) continue;
       if (jv <= 4) { floats++; inSmalls = true; continue; }
       var limit = trainPrev >= 0 ? trainPrev : headOK;
-      if (jv <= limit && (!inSmalls || j === CELLS - 1)) {
+      if (jv <= limit && (!inSmalls || airborne || j === CELLS - 1)) {
         floats++;
+        train++;
+        bigMass += jv;
         if (residueStart < 0) residueStart = j;
         residueEnd = j;
         trainPrev = jv;
@@ -215,12 +228,14 @@
         stranded++;
       }
     }
-    return { prefixPhi: prefixPhi, packedLen: packedLen, hasPair: pairUsed,
+    return { prefixPhi: prefixPhi, bigMass: bigMass,
+             packedLen: packedLen, hasPair: pairUsed,
              pairAt: pairAt,
              pairIsTail: pairUsed && pairAt === packedLen - 1,
              tailValue: tailValue,
              residueStart: residueStart, residueEnd: residueEnd,
-             floats: floats, leaked: leaked, stranded: stranded };
+             floats: floats, leaked: leaked, stranded: stranded,
+             train: train };
   }
 
   // The finished spiral: S[0..14] hold 65536 down to 4.
@@ -268,12 +283,13 @@
     // [.., 8, _, 4] is a fine rest state while the fully packed
     // [.., 8, 4] with nothing else on the board is a trap (only
     // chain-wrecking moves remain).
-    function continuable(b) {
+    function continuable(b, tol) {
+      var lim = tol || 0;
       for (var dir = 0; dir < 4; dir++) {
         var sim = simMove(b, dir);
         if (!sim.moved) continue;
         if (opts.free) return true;
-        if (!analyze(sim.board, S, loose).stranded) return true;
+        if (analyze(sim.board, S, loose).stranded <= lim) return true;
       }
       return false;
     }
@@ -286,31 +302,141 @@
     // through parks, flights and trains freely but must tidy up before
     // resting. Simple goals + deep lines beat clever goals + shallow
     // lines — every historic wall of this project fell to this shape.
-    function isGoal(ana, nb) {
-      if (ana.stranded) return false;
+    function countExtras(nb, packedLen) {
+      var n = 0;
+      for (var q = packedLen; q < CELLS; q++) {
+        if (nb[S[q]] !== 0) n++;
+      }
+      return n;
+    }
+    var startExtras = countExtras(b0, start.packedLen);
+
+    // Score runs enter a second act once 131072 is home: the collapse
+    // leaves the board swamped in spawned junk, and a whole new chain
+    // (65536 downward) must be bootstrapped through it. That junk is
+    // BIGGER than the baby chain hanging off the corner, so the strict
+    // build-phase classification would call every consolidation step
+    // damage, and the canon rest bar (a contiguous walk with one small
+    // extra) sits 30+ moves past every pair merge that vacates a cell —
+    // out of any search's reach. The healing regime stays on for the
+    // whole second act and rests on structural progress instead.
+    var healing = opts.goal === "score" && b0[S[0]] >= 131072;
+
+    // The one board a score run is allowed to die on: every cell holding
+    // the full descending chain 131072..4 — the maximum-score death.
+    function maxDeath(nb) {
+      for (var i = 0; i < CELLS; i++) {
+        if (nb[S[i]] !== (1 << (17 - i))) return false;
+      }
+      return true;
+    }
+
+    // The anchor rule: in the second act the 131072 either sits in its
+    // corner, or the corner is transiently empty (a column pump in
+    // flight) with the 131072 still in the corner's row or column so a
+    // slide can bring it straight home. A corner cell holding anything
+    // else means the 131072 got buried — no line out of that, ever.
+    function anchorOK(nb) {
+      var v = nb[S[0]];
+      if (v === 131072) return true;
+      if (v !== 0) return false;
+      var cx = S[0] % 4;
+      var cy = (S[0] / 4) | 0;
+      for (var i = 0; i < CELLS; i++) {
+        if (nb[i] === 131072) {
+          return (i % 4) === cx || ((i / 4) | 0) === cy;
+        }
+      }
+      return false;
+    }
+
+    // No resting on a board whose big tiles float past a hole: every
+    // tile >= 8 must sit on a fully occupied snake prefix. A vacated
+    // cell underneath the structure means the only compacting moves
+    // slide the corner row — a parked position with no way back.
+    function snakeCompact(nb) {
+      var holeAt = -1;
+      for (var i = 0; i < CELLS; i++) {
+        var v = nb[S[i]];
+        if (v === 0) { if (holeAt < 0) holeAt = i; continue; }
+        if (v >= 8 && holeAt >= 0) return false;
+      }
+      return true;
+    }
+
+    var startLoose = startExtras - start.train;
+
+    // Smalls parked in front of big tiles along the snake. The healthy
+    // order is bigs descending, then smalls, then space; one small deep
+    // in the big region is fine — it's the growable tail and ordinary
+    // feeding turns it into the next big — but two stacked smalls under
+    // a cliff wall each other off from their merge partners and the
+    // position bricks. Rests keep this count at one (or falling, while
+    // the post-collapse swamp still has many).
+    function misplacedOf(nb) {
+      var lastBig = -1;
+      for (var i = CELLS - 1; i >= 0; i--) {
+        if (nb[S[i]] >= 8) { lastBig = i; break; }
+      }
+      var n = 0;
+      for (var j = 0; j < lastBig; j++) {
+        var v = nb[S[j]];
+        if (v > 0 && v <= 4) n++;
+      }
+      return n;
+    }
+    var startMisplaced = misplacedOf(b0);
+
+    function isGoal(ana, nb, gained) {
       var extras = 0;
+      var canon = !ana.stranded;
       for (var q = ana.packedLen; q < CELLS; q++) {
         var qv = nb[S[q]];
         if (qv === 0) continue;
         extras++;
-        if (extras > 1) return false;
-        if (qv > 4) return false;
-        if (q > ana.packedLen + 1) return false;
+        if (extras > 1 || qv > 4 || q > ana.packedLen + 1) canon = false;
       }
-      if (ana.prefixPhi <= start.prefixPhi) return false;
-      if (continuable(nb)) return true;
-      // In a score run the very last rest is a board that dies full and
-      // mergeless with 131072 aboard — the glorious dead end.
-      return opts.goal === "score" && nb[S[0]] >= 131072;
+      if (canon && ana.prefixPhi > start.prefixPhi) {
+        if (continuable(nb)) return true;
+        // In a score run the very last rest is the glorious dead end;
+        // any other death is premature and not a goal.
+        return opts.goal === "score" && maxDeath(nb);
+      }
+      // Healing checkpoint: the game's own objective is the progress
+      // metric — the line banked some score (a real merge happened) and
+      // the structural guards all held: big mass never melts away,
+      // damage never grows, big tiles rest packed from the corner, the
+      // loose-small population stays bounded, and the board is alive.
+      // Score is strictly increasing and bounded by the ceiling, so the
+      // run always terminates; the guards herd every merge toward one
+      // descending chain, which is exactly the maximum-score death.
+      return healing && gained > 0 &&
+             ana.stranded <= start.stranded &&
+             ana.bigMass >= start.bigMass &&
+             extras - ana.train <= (startLoose > 2 ? startLoose : 2) &&
+             misplacedOf(nb) <= (startMisplaced > 1 ? startMisplaced : 1) &&
+             snakeCompact(nb) &&
+             continuable(nb, 1e9);
     }
 
     // Intermediates are freer than rests, but never allow stranded
     // chain material and keep the loose-tile population bounded so the
     // branching stays sane.
+    // Intermediates may be as messy as the root already is (healing a
+    // garbage-heavy board has to wade through it), just never messier
+    // than that or the tier's own allowance.
     function usable(ana) {
-      if (ana.stranded) return false;
-      if (ana.leaked > opts.leaked) return false;
-      return ana.floats <= opts.floats;
+      // Healing lines must pass through consolidation states (8+8 -> 16
+      // out of chain order) that the classifier counts as fresh damage;
+      // give them bounded slack instead of a hard wall. Likewise, when a
+      // column pump lifts the whole chain off the corner row the lifted
+      // structure reads as a giant train — cap only the loose smalls,
+      // not the structure in flight.
+      if (ana.stranded > start.stranded + (healing ? 2 : 0)) return false;
+      if (ana.leaked > Math.max(opts.leaked, start.leaked)) return false;
+      var fl = healing ? ana.floats - ana.train : ana.floats;
+      var fl0 = healing ? start.floats - start.train : start.floats;
+      return fl <= Math.max(opts.floats, fl0);
     }
 
     function spawnCells(post, packedLen) {
@@ -323,16 +449,20 @@
       return out;
     }
 
-    function dfs(b, depth) {
+    function dfs(b, depth, gained) {
       if (budget.nodes-- <= 0) return null;
-      var key = depth + "|" + b.join(",");
+      // Only whether the line has banked a merge matters to isGoal, so
+      // that one bit joins the memo key.
+      var key = depth + "|" + (gained > 0 ? 1 : 0) + "|" + b.join(",");
       if (failed[key]) return null;
       var sims = [];
       for (var dir = 0; dir < 4; dir++) {
         var sim = simMove(b, dir);
         if (!sim.moved) continue;
         var sa = analyze(sim.board, S, loose);
-        sims.push({ dir: dir, board: sim.board, ana: sa });
+        var msum = 0;
+        for (var mg = 0; mg < sim.merges.length; mg++) msum += sim.merges[mg];
+        sims.push({ dir: dir, board: sim.board, ana: sa, msum: msum });
       }
       sims.sort(function (a, b2) { return b2.ana.prefixPhi - a.ana.prefixPhi; });
       for (var m = 0; m < sims.length; m++) {
@@ -343,12 +473,13 @@
             var val = opts.valueOrder[vi];
             var nb = post.board.slice();
             nb[spawns[e]] = val;
+            if (healing && !anchorOK(nb)) continue;
             var ana = analyze(nb, S, loose);
             var step = { dir: post.dir, cell: spawns[e], value: val };
-            if (isGoal(ana, nb) && certify(nb)) return [step];
+            if (isGoal(ana, nb, gained + post.msum) && certify(nb)) return [step];
             if (depth + 1 >= maxDepth) continue;
             if (!usable(ana)) continue;
-            var sub = dfs(nb, depth + 1);
+            var sub = dfs(nb, depth + 1, gained + post.msum);
             if (sub) return [step].concat(sub);
           }
         }
@@ -357,7 +488,7 @@
       return null;
     }
 
-    return dfs(b0, 0);
+    return dfs(b0, 0, 0);
   }
 
   // ------------------------------------------------------------------
@@ -369,10 +500,15 @@
   // must merge exactly one pair (value >= 8, i.e. chain material) and the
   // spawn refills the single freed cell; only its value (2 vs 4) needs
   // choosing so garbage never lines up into an accidental merge.
-  function collapseSearch(b, S, memo) {
+  function collapseSearch(b, S, memo, mustContinue) {
     // Success means 131072 ON THE CHOSEN CORNER, not merely somewhere:
-    // the final 65536+65536 merge must land at S[0].
-    if (b[S[0]] >= 131072) return [];
+    // the final 65536+65536 merge must land at S[0]. A sprint is happy
+    // to die right there; a score run must keep playing, so its collapse
+    // has to leave the garbage with at least one legal move in it.
+    if (b[S[0]] >= 131072) {
+      if (!mustContinue) return [];
+      return boardDead(b) ? null : [];
+    }
     if (maxTile(b) >= 131072) return null;
     var key = b.join(",");
     if (memo.hasOwnProperty(key)) return memo[key];
@@ -389,7 +525,7 @@
         var val = vi === 0 ? 2 : 4; // 2 first: 9x cheaper to sample
         var nb = sim.board.slice();
         nb[empt[0]] = val;
-        var sub = collapseSearch(nb, S, memo);
+        var sub = collapseSearch(nb, S, memo, mustContinue);
         if (sub) {
           result = [{ dir: dir, cell: empt[0], value: val }].concat(sub);
           break outer;
@@ -492,7 +628,8 @@
     // folding the spiral.
     if (board[S[0]] < 131072 &&
         maxTile(board) >= 65536 && emptyCells(board).length === 0) {
-      var script = collapseSearch(board, S, this.collapseMemo);
+      var script = collapseSearch(board, S, this.collapseMemo,
+                                  this.goal === "score");
       if (script && script.length) {
         return { type: "line", steps: script, phase: "finale" };
       }
@@ -617,9 +754,12 @@
       // The world diverged from the line (shouldn't happen; replan).
       cache = this.planCache = null;
     }
-    if (!cache && this.unwinding) {
+    if (!cache && this.unwinding &&
+        !(this.ai.goal === "score" && board[this.ai.S[0]] >= 131072)) {
       // Mid-unwind, don't waste full searches on obvious wrecks (they
       // are stranded-shaped mid-line intermediates); just step back.
+      // Not in a score run's second act, though: healing rests carry
+      // stranded tiles by nature and are perfectly plannable.
       var quick = analyze(board, this.ai.S, true);
       if (quick.stranded && gm.undoStack.length > 0) {
         gm.move(-1);

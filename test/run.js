@@ -72,7 +72,7 @@ function runCorner(corner) {
   gm.restart(); // fresh board through the patched spawner
 
   var MAX_ATTEMPTS = 30e6;
-  var MAX_MS = 70 * 60 * 1000;
+  var MAX_MS = (Number(process.env.MAX_MIN) || 70) * 60 * 1000;
   var finaleSpawnedFour = false;
   var lastPhase = "build";
   var lastLog = 0;
@@ -169,7 +169,11 @@ function runCorner(corner) {
     "  score=" + gm.score +
     "  primed4=" + finaleSpawnedFour);
   console.log(fmt(b));
-  if (!ok) console.error("[" + corner + "] FAIL: 131072 not in the " + corner + " corner");
+  if (!ok) {
+    console.error("[" + corner + "] FAIL: " + (goal === "score"
+      ? "score run fell short (need dead board, 131072 in corner, score >= 3,930,000)"
+      : "131072 not in the " + corner + " corner"));
+  }
   if (!finaleSpawnedFour) console.error("[" + corner + "] WARN: finale prime phase never reported");
   return ok;
 }
