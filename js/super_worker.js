@@ -30,7 +30,7 @@ function endpointOf(board, steps) {
 onmessage = function (e) {
   var msg = e.data;
   if (msg.type === "init") {
-    ai = new Super2048.SuperAI(msg.corner);
+    ai = new Super2048.SuperAI(msg.corner, { goal: msg.goal });
   } else if (msg.type === "plan" && ai) {
     var plan = planAndSend(msg.board);
     if (plan.type === "line" && plan.steps.length) {

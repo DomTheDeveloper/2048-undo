@@ -297,7 +297,11 @@
         if (qv > 4) return false;
         if (q > ana.packedLen + 1) return false;
       }
-      return ana.prefixPhi > start.prefixPhi && continuable(nb);
+      if (ana.prefixPhi <= start.prefixPhi) return false;
+      if (continuable(nb)) return true;
+      // In a score run the very last rest is a board that dies full and
+      // mergeless with 131072 aboard — the glorious dead end.
+      return opts.goal === "score" && nb[S[0]] >= 131072;
     }
 
     // Intermediates are freer than rests, but never allow stranded
@@ -336,7 +340,7 @@
         var spawns = spawnCells(post.board, post.ana.packedLen);
         for (var e = 0; e < spawns.length; e++) {
           for (var vi = 0; vi < 2; vi++) {
-            var val = vi === 0 ? 4 : 2;
+            var val = opts.valueOrder[vi];
             var nb = post.board.slice();
             nb[spawns[e]] = val;
             var ana = analyze(nb, S, loose);
@@ -409,8 +413,16 @@
     { depth: 20, floats: 6, leaked: 2, nodes: 3e6, allCells: true }
   ];
 
-  function SuperAI(corner) {
+  // goal "tile"  — sprint to 131072 (4-feeds, fastest finish; the game
+  //                ends the moment the corner holds 131072).
+  // goal "score" — the maximum-score run: 2-feeds only (every spawned 4
+  //                costs 4 points), and after 131072 keep counting: stack
+  //                the full descending chain 65536, 32768, ... beside it
+  //                until the board dies full and mergeless. Theoretical
+  //                ceiling: 3,932,156 points.
+  function SuperAI(corner, opts) {
     this.corner = corner;
+    this.goal = (opts && opts.goal) === "score" ? "score" : "tile";
     this.S = snakeCells(corner);
     this.collapseMemo = {};
     this.certMemo = {};
@@ -428,6 +440,10 @@
     var o = {};
     for (var k in base) o[k] = base[k];
     o.deadEnds = this.deadEnds;
+    o.goal = this.goal;
+    // Sprint feeds 4s (twice the mass per move); a score run feeds 2s —
+    // every spawned 4 forfeits the 4 points its skipped merge was worth.
+    o.valueOrder = this.goal === "score" ? [2, 4] : [4, 2];
     return o;
   };
 
@@ -451,12 +467,31 @@
     this.deadEnds[deadKey(board)] = true;
   };
 
+  function boardDead(b) {
+    for (var dir = 0; dir < 4; dir++) {
+      if (simMove(b, dir).moved) return false;
+    }
+    return true;
+  }
+
   SuperAI.prototype.plan = function (board) {
     var S = this.S;
-    if (maxTile(board) >= 131072) return { type: "done" };
+    if (this.goal === "tile") {
+      if (maxTile(board) >= 131072) return { type: "done" };
+    } else {
+      // Max score: 131072 is the halfway mark; done means the board
+      // died full and mergeless with the descending chain stacked.
+      if (boardDead(board)) {
+        return maxTile(board) >= 131072
+          ? { type: "done" }
+          : { type: "stuck", reason: "board died early" };
+      }
+    }
 
-    // Finale: full board at 65536+ means we're folding the spiral.
-    if (maxTile(board) >= 65536 && emptyCells(board).length === 0) {
+    // Finale: full board at 65536+ (and no 131072 yet) means we're
+    // folding the spiral.
+    if (board[S[0]] < 131072 &&
+        maxTile(board) >= 65536 && emptyCells(board).length === 0) {
       var script = collapseSearch(board, S, this.collapseMemo);
       if (script && script.length) {
         return { type: "line", steps: script, phase: "finale" };
@@ -491,7 +526,7 @@
   function SuperDriver(gameManager, corner, TileCtor, options) {
     this.gm = gameManager;
     this.Tile = TileCtor;
-    this.ai = new SuperAI(corner);
+    this.ai = new SuperAI(corner, options);
     this.options = options || {};
     this.stats = { moves: 0, undos: 0, attempts: 0, restarts: 0,
                    backtracks: 0, startedAt: 0 };
@@ -571,7 +606,11 @@
   SuperDriver.prototype.step = function () {
     var gm = this.gm;
     var board = this.readBoard();
-    if (maxTile(board) >= 131072) return { type: "done" };
+    if (this.ai.goal === "score"
+        ? (boardDead(board) && maxTile(board) >= 131072)
+        : maxTile(board) >= 131072) {
+      return { type: "done" };
+    }
 
     var cache = this.planCache;
     if (cache && !boardsEqual(board, cache.expected)) {

@@ -45,6 +45,7 @@
   controller.corner = loadPref("super2048.corner", "br");
   controller.speed = loadPref("super2048.speed", "afap");
   controller.mode = loadPref("super2048.mode", "super");
+  controller.goal = loadPref("super2048.goal", "tile");
 
   // ----------------------------------------------------------------
   // Game hooks
@@ -122,7 +123,8 @@
     controller.plannerBusySince = 0;
     try {
       controller.worker = new Worker("js/super_worker.js");
-      controller.worker.postMessage({ type: "init", corner: controller.corner });
+      controller.worker.postMessage({ type: "init", corner: controller.corner,
+                                      goal: controller.goal });
       controller.planStore = {};
       controller.worker.onmessage = function (e) {
         var msg = e.data;
@@ -151,6 +153,7 @@
     g.restart();
     controller.driver = new Super.SuperDriver(g, controller.corner, Tile, {
       predictable: controller.mode === "predictable",
+      goal: controller.goal,
       externalPlanner: !!controller.worker,
       onDeadEnd: function (board) {
         if (controller.worker) {
@@ -241,6 +244,11 @@
       controller.dirty = true;
       render(); // show the primed board before the slow-motion collapse
     }
+    if (ev.type === "accepted" && ev.phase === "build" && controller.finale) {
+      // A score run keeps playing after the 131072 collapse; resume the
+      // chosen speed once the cinematic is over.
+      controller.finale = false;
+    }
     if (ev.type === "done") {
       controller.done = true;
       render();
@@ -301,15 +309,19 @@
       Math.floor(secs / 60) + ":" + ("0" + (secs % 60)).slice(-2);
 
     if (controller.done || justWon) {
-      setStatus("131072 — perfect spiral complete!");
+      setStatus(controller.goal === "score"
+        ? "maximum score reached — the board died gloriously!"
+        : "131072 — perfect spiral complete!");
     } else if (controller.finale) {
       setStatus("FINALE — folding the spiral into 131072…");
     } else if (controller.running) {
       var thinking = controller.plannerBusySince &&
         Date.now() - controller.plannerBusySince > 400;
       var max = Super.maxTile(d.readBoard());
-      setStatus((thinking ? "thinking… — " : "") +
-        "building the spiral — largest tile " + fmtInt(max) +
+      var progress = controller.goal === "score"
+        ? "score " + fmtInt(gm().score) + " / 3,932,156 — largest tile " + fmtInt(max)
+        : "building the spiral — largest tile " + fmtInt(max);
+      setStatus((thinking ? "thinking… — " : "") + progress +
         (controller.mode === "predictable" ? " (spawns by design)" : ""));
     }
   }
@@ -329,10 +341,17 @@
       el.classList.toggle("selected", el.getAttribute("data-mode") === controller.mode);
       el.classList.toggle("disabled", controller.running);
     });
+    $all(".super-goal-btn").forEach(function (el) {
+      el.classList.toggle("selected", el.getAttribute("data-goal") === controller.goal);
+      el.classList.toggle("disabled", controller.running);
+    });
     if (!controller.running && !controller.done) {
-      setStatus(controller.mode === "predictable"
-        ? "perfect game to 131072 — it decides every next tile and where it lands"
-        : "perfect game to 131072 — undoing every unlucky spawn along the way");
+      var how = controller.mode === "predictable"
+        ? "it decides every next tile and where it lands"
+        : "undoing every unlucky spawn along the way";
+      setStatus(controller.goal === "score"
+        ? "maximum-score run to 3,932,156 — " + how
+        : "perfect game to 131072 — " + how);
     }
   }
 
@@ -344,9 +363,19 @@
   function showWinOverlay() {
     var d = controller.driver;
     var el = $(".super-win");
-    $(".super-win-sub").innerHTML = controller.mode === "predictable"
-      ? "Perfect spiral complete — every tile chosen and placed by design.<br>The highest tile 2048 allows."
-      : "Perfect spiral complete — capped off by a spawned&nbsp;4.<br>The highest tile 2048 allows.";
+    var how = controller.mode === "predictable"
+      ? "every tile chosen and placed by design"
+      : "capped off by a spawned&nbsp;4";
+    if (controller.goal === "score") {
+      $(".super-win h2").textContent = fmtInt(gm().score);
+      $(".super-win-sub").innerHTML =
+        "Maximum-score run complete — 131072 plus the full descending " +
+        "chain, " + how + ".<br>The board is dead. Gloriously.";
+    } else {
+      $(".super-win h2").textContent = "131072";
+      $(".super-win-sub").innerHTML = "Perfect spiral complete — " + how +
+        ".<br>The highest tile 2048 allows.";
+    }
     $(".super-win-moves").textContent = fmtInt(d.stats.moves);
     $(".super-win-undos").textContent = fmtInt(d.stats.undos);
     var secs = Math.floor((Date.now() - controller.startedAt) / 1000);
@@ -390,6 +419,16 @@
         if (controller.running) return; // pick before you launch
         controller.mode = el.getAttribute("data-mode");
         savePref("super2048.mode", controller.mode);
+        updateControls();
+      });
+    });
+
+    $all(".super-goal-btn").forEach(function (el) {
+      el.addEventListener("click", function (e) {
+        e.preventDefault();
+        if (controller.running) return; // pick before you launch
+        controller.goal = el.getAttribute("data-goal");
+        savePref("super2048.goal", controller.goal);
         updateControls();
       });
     });

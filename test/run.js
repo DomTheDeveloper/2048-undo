@@ -63,9 +63,11 @@ function runCorner(corner) {
   var game = makeGame();
   var gm = game.gm;
 
+  var goal = process.env.GOAL === "score" ? "score" : "tile";
   var driver = new Super.SuperDriver(gm, corner, game.Tile,
     { verify: true, trace: process.env.TRACE === "1",
-      predictable: process.env.PREDICTABLE === "1" });
+      predictable: process.env.PREDICTABLE === "1",
+      goal: goal });
   driver.attach();
   gm.restart(); // fresh board through the patched spawner
 
@@ -148,7 +150,18 @@ function runCorner(corner) {
 
   var b = driver.readBoard();
   var S = Super.snakeCells(corner);
-  var ok = b[S[0]] === 131072;
+  var ok;
+  if (goal === "score") {
+    var dead = true;
+    for (var dd = 0; dd < 4; dd++) {
+      if (Super.simMove(b, dd).moved) dead = false;
+    }
+    ok = b[S[0]] === 131072 && dead && gm.score >= 3930000;
+    console.log("[" + corner + "] score-goal: score=" + gm.score +
+      " (ceiling 3,932,156)  dead=" + dead);
+  } else {
+    ok = b[S[0]] === 131072;
+  }
   console.log("[" + corner + "] DONE in " + ((Date.now() - t0) / 1000).toFixed(1) + "s" +
     "  moves=" + driver.stats.moves +
     "  undos=" + driver.stats.undos +

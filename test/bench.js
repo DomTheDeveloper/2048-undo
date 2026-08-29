@@ -24,6 +24,7 @@ var Super = require(process.env.SUPER_AI ||
   path.join(__dirname, "..", "js", "super_ai.js"));
 
 var CORNER = process.env.CORNER || "br";
+var GOAL = process.env.GOAL === "score" ? "score" : "tile";
 
 function fmtInt(n) {
   return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
@@ -58,18 +59,25 @@ function maxTile(b) {
 // ------------------------------------------------------------------
 
 function runControlled(name, place) {
-  var ai = new Super.SuperAI(CORNER);
+  var ai = new Super.SuperAI(CORNER, { goal: GOAL });
   var S = Super.snakeCells(CORNER);
   var b = freshBoard();
   var hist = [];
-  var stats = { moves: 0, attempts: 0, undos: 0, backtracks: 0 };
+  var stats = { moves: 0, attempts: 0, undos: 0, backtracks: 0, score: 0 };
   var planMs = 0, engineMs = 0;
   var backStep = 4;
   var unwinding = false;
   var bestPhi = -1;
   var t0 = Date.now();
 
-  while (maxTile(b) < 131072) {
+  function goalDone(bb) {
+    if (GOAL === "tile") return maxTile(bb) >= 131072;
+    if (maxTile(bb) < 131072) return false;
+    for (var d = 0; d < 4; d++) if (Super.simMove(bb, d).moved) return false;
+    return true;
+  }
+
+  while (!goalDone(b)) {
     if (Date.now() - t0 > 90 * 60 * 1000) throw new Error(name + ": time out");
 
     var tp = Date.now();
@@ -108,7 +116,9 @@ function runControlled(name, place) {
       var step = plan.steps[i];
       hist.push(b);
       if (hist.length > 600) hist.splice(0, 100);
-      var post = Super.simMove(b, step.dir).board;
+      var sim = Super.simMove(b, step.dir);
+      var post = sim.board;
+      for (var mg = 0; mg < sim.merges.length; mg++) stats.score += sim.merges[mg];
       stats.attempts += place(step, post);
       post[step.cell] = step.value;
       b = post;
@@ -121,7 +131,9 @@ function runControlled(name, place) {
   }
 
   var secs = (Date.now() - t0) / 1000;
-  console.log("[" + name + "] 131072 in " + secs.toFixed(1) + "s" +
+  console.log("[" + name + "] " + (GOAL === "score" ? "max-score" : "131072") +
+    " in " + secs.toFixed(1) + "s" +
+    "  score=" + fmtInt(stats.score) +
     "  moves=" + fmtInt(stats.moves) +
     "  attempts=" + fmtInt(stats.attempts) +
     "  undos(re-rolls)=" + fmtInt(stats.attempts - stats.moves) +

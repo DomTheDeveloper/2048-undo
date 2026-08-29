@@ -58,7 +58,10 @@
   margin-top: 10px;
 }
 
-.super-mode-btn {
+.super-goals { margin-top: 6px; }
+
+.super-mode-btn,
+.super-goal-btn {
   display: inline-block;
   background: rgba(238, 228, 218, 0.35);
   border-radius: 3px;
@@ -73,20 +76,24 @@
   user-select: none;
 }
 
-.super-mode-btn small {
+.super-mode-btn small,
+.super-goal-btn small {
   font-weight: normal;
   opacity: 0.8;
   margin-left: 4px;
 }
 
-.super-mode-btn:hover { background: rgba(238, 228, 218, 0.55); }
+.super-mode-btn:hover,
+.super-goal-btn:hover { background: rgba(238, 228, 218, 0.55); }
 
-.super-mode-btn.selected {
+.super-mode-btn.selected,
+.super-goal-btn.selected {
   background: #edc22e;
   color: #776e65;
 }
 
-.super-mode-btn.disabled { cursor: default; opacity: 0.6; }
+.super-mode-btn.disabled,
+.super-goal-btn.disabled { cursor: default; opacity: 0.6; }
 
 .super-controls {
   display: -webkit-flex;
