@@ -134,7 +134,7 @@
   //   floats   - tiles <= 4 near the frontier (feed/parking material, fine)
   //   leaked   - tiles <= 4 far from the frontier (mass drifting away)
   //   stranded - any tile >= 8 outside the packed chain (real damage)
-  function analyze(b, S, loose) {
+  function analyze(b, S, loose, shop) {
     var prefixPhi = 0;
     var bigMass = 0;
     var prev = Infinity;
@@ -216,7 +216,7 @@
     var workshop = false;
     for (var j = packedLen; j < CELLS; j++) {
       var jv = b[S[j]];
-      if (jv === 0) { workshop = true; continue; }
+      if (jv === 0) { if (shop) workshop = true; continue; }
       if (jv <= 4) { floats++; inSmalls = true; continue; }
       if (workshop) {
         floats++;
@@ -268,7 +268,11 @@
   // the worst case bounded.
   function buildSearch(b0, S, opts, certMemo) {
     var loose = !opts.strictPairs;
-    var start = analyze(b0, S, loose);
+    // The healing regime (a score run's second act) reads boards with
+    // workshop rules; the sprint classifier must stay byte-identical,
+    // so the flag is decided first and threaded through every analyze.
+    var healing = opts.goal === "score" && b0[S[0]] >= 131072;
+    var start = analyze(b0, S, loose, healing);
     var maxDepth = opts.depth;
     var budget = { nodes: opts.nodes };
     var failed = {};
@@ -297,7 +301,7 @@
         var sim = simMove(b, dir);
         if (!sim.moved) continue;
         if (opts.free) return true;
-        if (analyze(sim.board, S, loose).stranded <= lim) return true;
+        if (analyze(sim.board, S, loose, healing).stranded <= lim) return true;
       }
       return false;
     }
@@ -318,17 +322,6 @@
       return n;
     }
     var startExtras = countExtras(b0, start.packedLen);
-
-    // Score runs enter a second act once 131072 is home: the collapse
-    // leaves the board swamped in spawned junk, and a whole new chain
-    // (65536 downward) must be bootstrapped through it. That junk is
-    // BIGGER than the baby chain hanging off the corner, so the strict
-    // build-phase classification would call every consolidation step
-    // damage, and the canon rest bar (a contiguous walk with one small
-    // extra) sits 30+ moves past every pair merge that vacates a cell —
-    // out of any search's reach. The healing regime stays on for the
-    // whole second act and rests on structural progress instead.
-    var healing = opts.goal === "score" && b0[S[0]] >= 131072;
 
     // The one board a score run is allowed to die on: every cell holding
     // the full descending chain 131072..4 — the maximum-score death.
@@ -476,7 +469,7 @@
       for (var dir = 0; dir < 4; dir++) {
         var sim = simMove(b, dir);
         if (!sim.moved) continue;
-        var sa = analyze(sim.board, S, loose);
+        var sa = analyze(sim.board, S, loose, healing);
         var msum = 0;
         for (var mg = 0; mg < sim.merges.length; mg++) msum += sim.merges[mg];
         sims.push({ dir: dir, board: sim.board, ana: sa, msum: msum });
@@ -491,7 +484,7 @@
             var nb = post.board.slice();
             nb[spawns[e]] = val;
             if (healing && !anchorOK(nb)) continue;
-            var ana = analyze(nb, S, loose);
+            var ana = analyze(nb, S, loose, healing);
             var step = { dir: post.dir, cell: spawns[e], value: val };
             if (isGoal(ana, nb, gained + post.msum) && certify(nb)) return [step];
             if (depth + 1 >= maxDepth) continue;
