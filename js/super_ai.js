@@ -387,14 +387,18 @@
     // position bricks. Rests keep this count at one (or falling, while
     // the post-collapse swamp still has many).
     function misplacedOf(nb) {
+      // Only the ordered structure before the first hole sets the bar;
+      // workshop bigs past it are order-free and wall nothing in.
       var lastBig = -1;
-      for (var i = CELLS - 1; i >= 0; i--) {
-        if (nb[S[i]] >= 8) { lastBig = i; break; }
+      for (var i = 0; i < CELLS; i++) {
+        var v = nb[S[i]];
+        if (v === 0) break;
+        if (v >= 8) lastBig = i;
       }
       var n = 0;
       for (var j = 0; j < lastBig; j++) {
-        var v = nb[S[j]];
-        if (v > 0 && v <= 4) n++;
+        var w = nb[S[j]];
+        if (w > 0 && w <= 4) n++;
       }
       return n;
     }
