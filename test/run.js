@@ -64,7 +64,8 @@ function runCorner(corner) {
   var gm = game.gm;
 
   var driver = new Super.SuperDriver(gm, corner, game.Tile,
-    { verify: true, trace: process.env.TRACE === "1" });
+    { verify: true, trace: process.env.TRACE === "1",
+      predictable: process.env.PREDICTABLE === "1" });
   driver.attach();
   gm.restart(); // fresh board through the patched spawner
 

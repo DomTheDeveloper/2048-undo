@@ -17,6 +17,7 @@
     driver: null,
     corner: null,
     speed: null,
+    mode: null,
     finale: false,
     done: false,
     startedAt: 0,
@@ -24,6 +25,9 @@
     moveDebt: 0,
     rafId: null,
     pumpId: null,
+    worker: null,
+    plannerBusySince: 0,
+    requestedKey: null,
     savedProtoMove: null,
     savedProtoRestart: null
   };
@@ -40,6 +44,7 @@
 
   controller.corner = loadPref("super2048.corner", "br");
   controller.speed = loadPref("super2048.speed", "afap");
+  controller.mode = loadPref("super2048.mode", "super");
 
   // ----------------------------------------------------------------
   // Game hooks
@@ -109,10 +114,50 @@
     installHooks();
     hideWinOverlay();
 
+    // All searching happens in a worker so the page never freezes; if
+    // workers are unavailable (e.g. file://), fall back to planning on
+    // the main thread.
+    controller.worker = null;
+    controller.requestedKey = null;
+    controller.plannerBusySince = 0;
+    try {
+      controller.worker = new Worker("js/super_worker.js");
+      controller.worker.postMessage({ type: "init", corner: controller.corner });
+      controller.planStore = {};
+      controller.worker.onmessage = function (e) {
+        var msg = e.data;
+        if (msg.type === "plan" && controller.running) {
+          var key = msg.board.join(",");
+          controller.planStore[key] = { board: msg.board, plan: msg.plan };
+          var keys = Object.keys(controller.planStore);
+          if (keys.length > 8) delete controller.planStore[keys[0]];
+          if (controller.requestedKey === key) {
+            controller.requestedKey = null;
+            controller.plannerBusySince = 0;
+            tick(null, true); // resume the burst right away, no frame wait
+          }
+        }
+      };
+      controller.worker.onerror = function () {
+        // Lose the worker, keep the run: fall back to sync planning.
+        if (controller.worker) controller.worker.terminate();
+        controller.worker = null;
+        if (controller.driver) controller.driver.options.externalPlanner = false;
+      };
+    } catch (e) { controller.worker = null; }
+
     controller.aiActing = true;
     g.undoStack.length = 0;        // a fresh run keeps its own history
     g.restart();
-    controller.driver = new Super.SuperDriver(g, controller.corner, Tile, {});
+    controller.driver = new Super.SuperDriver(g, controller.corner, Tile, {
+      predictable: controller.mode === "predictable",
+      externalPlanner: !!controller.worker,
+      onDeadEnd: function (board) {
+        if (controller.worker) {
+          controller.worker.postMessage({ type: "markDead", board: board });
+        }
+      }
+    });
     controller.driver.attach();
     controller.aiActing = false;
 
@@ -131,6 +176,7 @@
     if (controller.rafId) cancelAnimationFrame(controller.rafId);
     if (controller.pumpId) clearInterval(controller.pumpId);
     controller.rafId = controller.pumpId = null;
+    if (controller.worker) { controller.worker.terminate(); controller.worker = null; }
     if (controller.driver) controller.driver.detach();
     removeHooks();
     document.body.classList.remove("super-running");
@@ -168,6 +214,7 @@
       if (mps !== Infinity && movesDone >= budgetMoves) break;
       var ev = stepOnce();
       if (ev === "halt") return;
+      if (ev === "planwait") break; // the worker is thinking; stay smooth
       if (ev === "accepted") {
         movesDone++;
         if (controller.finale) break; // one finale move per frame batch
@@ -206,6 +253,21 @@
       stopRun("stuck");
       return "halt";
     }
+    if (ev.type === "needplan") {
+      var key = ev.board.join(",");
+      var stored = controller.planStore && controller.planStore[key];
+      if (stored) {
+        delete controller.planStore[key];
+        controller.driver.setPlan(stored.board, stored.plan);
+        return "working"; // prefetched: keep the burst rolling
+      }
+      if (controller.worker && controller.requestedKey !== key) {
+        controller.requestedKey = key;
+        controller.plannerBusySince = Date.now();
+        controller.worker.postMessage({ type: "plan", board: ev.board });
+      }
+      return "planwait";
+    }
     return ev.type === "accepted" ? "accepted" : "working";
   }
 
@@ -243,8 +305,12 @@
     } else if (controller.finale) {
       setStatus("FINALE — folding the spiral into 131072…");
     } else if (controller.running) {
+      var thinking = controller.plannerBusySince &&
+        Date.now() - controller.plannerBusySince > 400;
       var max = Super.maxTile(d.readBoard());
-      setStatus("building the spiral — largest tile " + fmtInt(max));
+      setStatus((thinking ? "thinking… — " : "") +
+        "building the spiral — largest tile " + fmtInt(max) +
+        (controller.mode === "predictable" ? " (spawns by design)" : ""));
     }
   }
 
@@ -259,8 +325,14 @@
       el.classList.toggle("selected", el.getAttribute("data-corner") === controller.corner);
       el.classList.toggle("disabled", controller.running);
     });
+    $all(".super-mode-btn").forEach(function (el) {
+      el.classList.toggle("selected", el.getAttribute("data-mode") === controller.mode);
+      el.classList.toggle("disabled", controller.running);
+    });
     if (!controller.running && !controller.done) {
-      setStatus("plays a perfect game to the 131072 tile, undoing every unlucky spawn");
+      setStatus(controller.mode === "predictable"
+        ? "perfect game to 131072 — it decides every next tile and where it lands"
+        : "perfect game to 131072 — undoing every unlucky spawn along the way");
     }
   }
 
@@ -272,6 +344,9 @@
   function showWinOverlay() {
     var d = controller.driver;
     var el = $(".super-win");
+    $(".super-win-sub").innerHTML = controller.mode === "predictable"
+      ? "Perfect spiral complete — every tile chosen and placed by design.<br>The highest tile 2048 allows."
+      : "Perfect spiral complete — capped off by a spawned&nbsp;4.<br>The highest tile 2048 allows.";
     $(".super-win-moves").textContent = fmtInt(d.stats.moves);
     $(".super-win-undos").textContent = fmtInt(d.stats.undos);
     var secs = Math.floor((Date.now() - controller.startedAt) / 1000);
@@ -305,6 +380,16 @@
         if (controller.running) return; // pick before you launch
         controller.corner = el.getAttribute("data-corner");
         savePref("super2048.corner", controller.corner);
+        updateControls();
+      });
+    });
+
+    $all(".super-mode-btn").forEach(function (el) {
+      el.addEventListener("click", function (e) {
+        e.preventDefault();
+        if (controller.running) return; // pick before you launch
+        controller.mode = el.getAttribute("data-mode");
+        savePref("super2048.mode", controller.mode);
         updateControls();
       });
     });

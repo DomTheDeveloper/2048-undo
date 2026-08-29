@@ -14,13 +14,25 @@ the whole chain folds into **131072**, the highest tile 2048's rules allow.
 
 - Pick the target corner (bottom-right by default) on the mini-board.
 - Pick a speed: **1×–5×**, or **AFAP** (as fast as possible).
+- Pick a flavor:
+  - **🎲 SUPER** — spawns stay honest (90% twos, random cells); every
+    unlucky one gets undone and re-rolled. About 1.8 million undos per
+    perfect game.
+  - **🔮 PREDICTABLE** — the AI decides which tile comes next *and where
+    it lands*, choosing the placement that finishes fastest. Zero undos,
+    zero luck: every move within ~12% of the 32,767-move lower bound that
+    mass arithmetic allows.
 - The finale always plays out in slow motion. It's the money shot.
 
 The engine (`js/super_ai.js`) is a checkpoint search over controlled
-outcomes: it plans a line of moves together with the spawn each move needs,
-plays a move, and if the random tile lands wrong it undoes and re-rolls.
-Every state on screen is a real, legal game state reached by real moves.
-`node test/run.js` drives the same engine headless as proof.
+outcomes: it plans a line of moves together with the spawn each move
+needs, then either re-rolls reality until it matches (super) or simply
+places the planned tile (predictable). Every state on screen is a real,
+legal game state reached by real moves. All searching runs in a Web
+Worker (`js/super_worker.js`), one line prefetched ahead, so the page
+stays at 60fps even while the planner thinks hard.
+`node test/run.js` drives the same engine headless as proof
+(`PREDICTABLE=1` for the controlled-spawn mode).
 
 ### Contributions
 

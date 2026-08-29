@@ -501,9 +501,19 @@
     this.planCache = null;
     this.consecFails = 0;
     this.lastSpawn = null;
+    this.pendingSpawn = null;
+    this.injectedPlan = null;
     this.attached = false;
     this.history = [];
   }
+
+  // External planning support (browser: plans computed in a Web Worker
+  // so searches never block the page). When options.externalPlanner is
+  // set, step() never calls ai.plan itself: it returns
+  // {type:"needplan", board} and waits for setPlan().
+  SuperDriver.prototype.setPlan = function (board, plan) {
+    this.injectedPlan = { key: board.join(","), plan: plan };
+  };
 
   SuperDriver.prototype.readBoard = function () {
     var b = new Array(CELLS);
@@ -519,14 +529,23 @@
 
   // Replace addRandomTile with an O(1) version. The original reseeds and
   // burns score-many PRNG draws per spawn, which is unusably slow at the
-  // multi-million scores Super Mode reaches. Distribution is identical
-  // (uniform cell, 90/10 two/four) and the seed machinery is restored
-  // when the driver detaches.
+  // multi-million scores Super Mode reaches. In super mode the
+  // distribution is identical (uniform cell, 90/10 two/four) and the
+  // undo button re-rolls the misses; in predictable mode the planner's
+  // chosen tile is placed directly — no luck, no undos. The original
+  // machinery is restored when the driver detaches.
   SuperDriver.prototype.attach = function () {
     if (this.attached) return;
     var self = this;
     var Tile = this.Tile;
     this.gm.addRandomTile = function () {
+      var pending = self.pendingSpawn;
+      self.pendingSpawn = null;
+      if (pending && this.grid.cellAvailable(pending)) {
+        this.grid.insertTile(new Tile(pending, pending.value));
+        self.lastSpawn = { x: pending.x, y: pending.y, value: pending.value };
+        return;
+      }
       var cells = this.grid.availableCells();
       if (!cells.length) return;
       var value = Math.random() < 0.9 ? 2 : 4;
@@ -570,7 +589,17 @@
       }
     }
     if (!cache) {
-      var plan = this.ai.plan(board);
+      var plan;
+      if (this.options.externalPlanner) {
+        if (this.injectedPlan && this.injectedPlan.key === board.join(",")) {
+          plan = this.injectedPlan.plan;
+          this.injectedPlan = null;
+        } else {
+          return { type: "needplan", board: board };
+        }
+      } else {
+        plan = this.ai.plan(board);
+      }
       if (plan.type === "done") return { type: "done" };
       if (plan.type === "stuck") {
         this.lastStuck = { board: board, reason: plan.reason };
@@ -592,6 +621,7 @@
           // family and use the undo button for real — jump back and let
           // the search pick a different line around it.
           this.ai.markDeadEnd(board);
+          if (this.options.onDeadEnd) this.options.onDeadEnd(board);
           back = Math.min(this.backtrackStep, gm.undoStack.length);
           this.backtrackStep = Math.min(this.backtrackStep * 2, 512);
           this.stats.backtracks++;
@@ -615,6 +645,13 @@
 
     this.lastSpawn = null;
     this.stats.attempts++;
+    if (this.options.predictable) {
+      // Predictable mode: the planner controls the spawn outright —
+      // the exact tile it wants appears where it wants it. No luck to
+      // re-roll, so no undos.
+      this.pendingSpawn = { x: step.cell % 4, y: (step.cell / 4) | 0,
+                           value: step.value };
+    }
     gm.move(step.dir);
 
     if (!this.lastSpawn) {
