@@ -134,12 +134,13 @@
   //   floats   - tiles <= 4 near the frontier (feed/parking material, fine)
   //   leaked   - tiles <= 4 far from the frontier (mass drifting away)
   //   stranded - any tile >= 8 outside the packed chain (real damage)
-  function analyze(b, S, loose, shop) {
+  function analyze(b, S, loose, shop, pair44) {
     var prefixPhi = 0;
     var bigMass = 0;
     var structPhi = 0;
     var prev = Infinity;
     var pairUsed = false;
+    var pair4Used = false;
     var pairAt = -1;
     var packedLen = 0;
     while (packedLen < CELLS) {
@@ -148,10 +149,18 @@
       if (v > prev) break;
       if (v === prev) {
         // A healthy counter carries at most one equal (mergeable) pair;
-        // runs of three-plus can't be merged without side damage.
-        if (pairUsed) break;
-        pairUsed = true;
-        pairAt = packedLen;
+        // runs of three-plus can't be merged without side damage. In a
+        // 4-only game the walk may carry ONE extra pair of 4s: that's
+        // the feed pair, and without a 2 to park instead it appears at
+        // the tail whenever a carry pair is mid-cascade. Refusing it
+        // starves the search of rests at exactly the turn motifs.
+        if (pairUsed) {
+          if (!(pair44 && v === 4 && !pair4Used)) break;
+          pair4Used = true;
+        } else {
+          pairUsed = true;
+          pairAt = packedLen;
+        }
       }
       prefixPhi += v * W[packedLen];
       // The big-structure mass: feed smalls churn constantly, but the
@@ -278,7 +287,8 @@
     // workshop rules; the sprint classifier must stay byte-identical,
     // so the flag is decided first and threaded through every analyze.
     var healing = opts.goal === "score" && b0[S[0]] >= 131072;
-    var start = analyze(b0, S, loose, healing);
+    var pair44 = !!opts.pair44;
+    var start = analyze(b0, S, loose, healing, pair44);
     var maxDepth = opts.depth;
     var budget = { nodes: opts.nodes };
     var failed = {};
@@ -307,7 +317,7 @@
         var sim = simMove(b, dir);
         if (!sim.moved) continue;
         if (opts.free) return true;
-        if (analyze(sim.board, S, loose, healing).stranded <= lim) return true;
+        if (analyze(sim.board, S, loose, healing, pair44).stranded <= lim) return true;
       }
       return false;
     }
@@ -475,7 +485,7 @@
       for (var dir = 0; dir < 4; dir++) {
         var sim = simMove(b, dir);
         if (!sim.moved) continue;
-        var sa = analyze(sim.board, S, loose, healing);
+        var sa = analyze(sim.board, S, loose, healing, pair44);
         var msum = 0;
         for (var mg = 0; mg < sim.merges.length; mg++) msum += sim.merges[mg];
         sims.push({ dir: dir, board: sim.board, ana: sa, msum: msum });
@@ -490,7 +500,7 @@
             var nb = post.board.slice();
             nb[spawns[e]] = val;
             if (healing && !anchorOK(nb)) continue;
-            var ana = analyze(nb, S, loose, healing);
+            var ana = analyze(nb, S, loose, healing, pair44);
             var step = { dir: post.dir, cell: spawns[e], value: val };
             if (isGoal(ana, nb, gained + post.msum) && certify(nb)) return [step];
             if (depth + 1 >= maxDepth) continue;
@@ -611,6 +621,7 @@
     for (var k in base) o[k] = base[k];
     o.deadEnds = this.deadEnds;
     o.exactDead = this.perfect;
+    o.pair44 = this.perfect;
     o.goal = this.goal;
     // Sprint feeds 4s (twice the mass per move); a score run feeds 2s —
     // every spawned 4 forfeits the 4 points its skipped merge was worth.
