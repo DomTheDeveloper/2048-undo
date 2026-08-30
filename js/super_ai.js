@@ -293,7 +293,7 @@
     // is simply the next plan's problem; the dead-end family blacklist
     // plus undo-backtracking referee everything else.
     function certify(nb) {
-      return !(opts.deadEnds && opts.deadEnds[deadKey(nb)]);
+      return !(opts.deadEnds && opts.deadEnds[deadKey(nb, opts.exactDead)]);
     }
 
     // A rest state must stay playable: some legal move that doesn't
@@ -600,6 +600,7 @@
     var o = {};
     for (var k in base) o[k] = base[k];
     o.deadEnds = this.deadEnds;
+    o.exactDead = this.perfect;
     o.goal = this.goal;
     // Sprint feeds 4s (twice the mass per move); a score run feeds 2s —
     // every spawned 4 forfeits the 4 points its skipped merge was worth.
@@ -616,7 +617,15 @@
   // mark condemns the whole family instead of playing whack-a-mole
   // with thousands of isomorphs. Conservative (a few viable variants
   // die too), but backtracking just diverts to a different line.
-  function deadKey(b) {
+  //
+  // NOT in perfect mode, though: with a 4-only spawn menu, consecutive
+  // legitimate checkpoints differ exactly by 4-placements — the very
+  // thing the family key erases — so one mark condemns the next
+  // stretch of the build, the search sticks again, marks again, and
+  // the poisoning cascades until nothing within undo reach can plan.
+  // There, dead ends are exact boards.
+  function deadKey(b, exact) {
+    if (exact) return b.join(",");
     var out = new Array(CELLS);
     for (var i = 0; i < CELLS; i++) out[i] = b[i] <= 4 ? 0 : b[i];
     return out.join(",");
@@ -628,7 +637,7 @@
   // the (memoized, instant) failed plan and marks that state dead too,
   // propagating the dead zone backward one checkpoint at a time.
   SuperAI.prototype.markDeadEnd = function (board) {
-    this.deadEnds[deadKey(board)] = true;
+    this.deadEnds[deadKey(board, this.perfect)] = true;
   };
 
   function boardDead(b) {
