@@ -137,6 +137,7 @@
   function analyze(b, S, loose, shop) {
     var prefixPhi = 0;
     var bigMass = 0;
+    var structPhi = 0;
     var prev = Infinity;
     var pairUsed = false;
     var pairAt = -1;
@@ -157,7 +158,12 @@
       // >= 8 backbone (walk + docked train) only changes on structural
       // events, and merges within it preserve it exactly — the right
       // invariant to hold while a line rummages through the board.
-      if (v >= 8) bigMass += v;
+      // structPhi is its positional cousin: the walk scored over big
+      // tiles only. Progress ratchets (the backtrack ladder) must key
+      // on THIS, not prefixPhi — feed smalls jitter prefixPhi upward
+      // on every replay, and a ladder that resets on jitter can cycle
+      // undo-replay forever without ever escalating its way out.
+      if (v >= 8) { bigMass += v; structPhi += v * W[packedLen]; }
       prev = v;
       packedLen++;
     }
@@ -236,7 +242,7 @@
         stranded++;
       }
     }
-    return { prefixPhi: prefixPhi, bigMass: bigMass,
+    return { prefixPhi: prefixPhi, bigMass: bigMass, structPhi: structPhi,
              packedLen: packedLen, hasPair: pairUsed,
              pairAt: pairAt,
              pairIsTail: pairUsed && pairAt === packedLen - 1,
@@ -894,9 +900,12 @@
       if (cache.idx >= cache.steps.length) this.planCache = null;
     }
 
-    // Only genuinely new territory resets the backtrack ladder;
-    // replaying old ground after an undo keeps it climbing.
-    var phiNow = analyze(got, this.ai.S, true).prefixPhi;
+    // Only genuinely new territory resets the backtrack ladder, and
+    // "new" is judged on the big-tile backbone alone: replayed ground
+    // jitters the full phi upward on every cycle (feed smalls land in
+    // slightly different cells), and a ladder that resets on jitter
+    // undo-replays the same wall forever without ever escalating.
+    var phiNow = analyze(got, this.ai.S, true).structPhi;
     if (phiNow > this.bestPhi) {
       this.bestPhi = phiNow;
       this.backtrackStep = 4;
@@ -1069,7 +1078,7 @@
         this.board = sim.board;
         this.stats.moves++;
         this.unwinding = false;
-        var phi = analyze(this.board, this.S, true).prefixPhi;
+        var phi = analyze(this.board, this.S, true).structPhi;
         if (phi > this.bestPhi) { this.bestPhi = phi; this.backStep = 4; }
       }
     }

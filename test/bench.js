@@ -124,7 +124,7 @@ function runControlled(name, place) {
       b = post;
       stats.moves++;
       unwinding = false;
-      var phi = Super.analyze(b, S, true).prefixPhi;
+      var phi = Super.analyze(b, S, true).structPhi;
       if (phi > bestPhi) { bestPhi = phi; backStep = 4; }
     }
     engineMs += Date.now() - te;

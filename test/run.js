@@ -73,7 +73,7 @@ function runCorner(corner) {
   driver.attach();
   gm.restart(); // fresh board through the patched spawner
 
-  var MAX_ATTEMPTS = 30e6;
+  var MAX_ATTEMPTS = Number(process.env.MAX_ATTEMPTS) || 30e6;
   var MAX_MS = (Number(process.env.MAX_MIN) || 70) * 60 * 1000;
   var finaleSpawnedFour = false;
   var lastPhase = "build";
@@ -134,6 +134,8 @@ function runCorner(corner) {
       lastBeat = Date.now();
       console.log("[" + corner + "] beat moves=" + driver.stats.moves +
         " attempts=" + driver.stats.attempts +
+        " undos=" + driver.stats.undos +
+        " backtracks=" + driver.stats.backtracks +
         " max=" + Super.maxTile(driver.readBoard()) +
         " restarts=" + driver.stats.restarts +
         " board=[" + driver.readBoard().join(",") + "]");
@@ -167,11 +169,13 @@ function runCorner(corner) {
       // The mass ledger makes this a theorem, not a hope: with every
       // build spawn a 4, the surviving line is exactly 32,766 build
       // moves + 15 collapse moves. (Undone moves don't count; in
-      // predictable play every undo removed one accepted move.)
+      // predictable play every undo removed one accepted move. A
+      // restart would reset the line, so the equality only binds on
+      // restart-free runs.)
       var net = driver.stats.moves - driver.stats.undos;
       console.log("[" + corner + "] perfect-goal: net moves=" + net +
-        " (theoretical minimum 32,781)");
-      ok = ok && net === 32781;
+        " (theoretical minimum 32,781; restarts=" + driver.stats.restarts + ")");
+      ok = ok && (driver.stats.restarts > 0 || net === 32781);
     }
   }
   console.log("[" + corner + "] DONE in " + ((Date.now() - t0) / 1000).toFixed(1) + "s" +
