@@ -603,6 +603,11 @@
     // (the same ledger gives the known 519 for the 2048 tile). A score
     // run ignores the flag: max score wants the opposite dial - all 2s.
     this.perfect = !!(opts && opts.perfect) && this.goal !== "score";
+    // Family dead-end keys erase smalls; wherever consecutive
+    // legitimate rests differ only by small placements (a 4-only build,
+    // a score run's dense second act) one mark poisons the next stretch
+    // and the cascade ends in a restart. Those regimes use exact keys.
+    this.exactDead = this.perfect || this.goal === "score";
     this.S = snakeCells(corner);
     this.collapseMemo = {};
     this.certMemo = {};
@@ -620,7 +625,7 @@
     var o = {};
     for (var k in base) o[k] = base[k];
     o.deadEnds = this.deadEnds;
-    o.exactDead = this.perfect;
+    o.exactDead = this.exactDead;
     o.pair44 = this.perfect;
     o.goal = this.goal;
     // Sprint feeds 4s (twice the mass per move); a score run feeds 2s —
@@ -658,7 +663,7 @@
   // the (memoized, instant) failed plan and marks that state dead too,
   // propagating the dead zone backward one checkpoint at a time.
   SuperAI.prototype.markDeadEnd = function (board) {
-    this.deadEnds[deadKey(board, this.perfect)] = true;
+    this.deadEnds[deadKey(board, this.exactDead)] = true;
   };
 
   function boardDead(b) {
