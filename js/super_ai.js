@@ -538,19 +538,26 @@
   // (8, 16, ... 131072, at most one junk merge alongside) or is a pure
   // junk-consolidation move (2+2 merges only, cascade untouched).
   function collapseSearch(b, S, memo, mustContinue) {
+    // Hard node cap: on the canonical primed board the fold is found
+    // well inside it, and on anything messier the answer is "no" —
+    // which must come back in seconds, not hours (a full board passes
+    // through the fold guard transiently all through the 65536 era).
+    var fuel = { nodes: 2e7 };
     for (var budget = 15; budget <= 26; budget++) {
-      var r = collapseDFS(b, S, memo, mustContinue, 0, budget);
+      var r = collapseDFS(b, S, memo, mustContinue, 0, budget, fuel);
       if (r) return r;
+      if (fuel.nodes <= 0) return null;
     }
     return null;
   }
 
-  function collapseDFS(b, S, memo, mustContinue, prev, left) {
+  function collapseDFS(b, S, memo, mustContinue, prev, left, fuel) {
     if (b[S[0]] >= 131072) {
       if (!mustContinue) return [];
       return boardDead(b) ? null : [];
     }
     if (left <= 0 || maxTile(b) >= 131072) return null;
+    if (fuel.nodes-- <= 0) return null;
     var key = prev + "|" + left + "|" + b.join(",");
     if (memo.hasOwnProperty(key)) return memo[key] || null;
     memo[key] = false; // cycle guard / proven failure
@@ -588,7 +595,7 @@
           var val = vi === 0 ? 2 : 4; // 2 first: 9x cheaper to sample
           var nb = sim.board.slice();
           nb[empt[ei]] = val;
-          var sub = collapseDFS(nb, S, memo, mustContinue, nextPrev, left - 1);
+          var sub = collapseDFS(nb, S, memo, mustContinue, nextPrev, left - 1, fuel);
           if (sub) {
             result = [{ dir: dir, cell: empt[ei], value: val }].concat(sub);
             break outer;
@@ -732,10 +739,13 @@
       }
     }
 
-    // Finale: full board at 65536+ (and no 131072 yet) means we're
-    // folding the spiral.
-    if (board[S[0]] < 131072 &&
-        maxTile(board) >= 65536 && emptyCells(board).length === 0) {
+    // Finale: the primed spiral means we're folding. The top of the
+    // chain must actually be seated — a board that merely happens to be
+    // full during a 65536-era feed cycle is not a fold candidate, and
+    // asking the fold search about it is expensive.
+    if (board[S[0]] === 65536 && board[S[1]] === 32768 &&
+        board[S[2]] === 16384 && board[S[3]] === 8192 &&
+        emptyCells(board).length === 0) {
       var script = collapseSearch(board, S, this.collapseMemo,
                                   this.goal === "score");
       if (script && script.length) {
