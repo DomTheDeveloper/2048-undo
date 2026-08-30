@@ -303,7 +303,7 @@
     // is simply the next plan's problem; the dead-end family blacklist
     // plus undo-backtracking referee everything else.
     function certify(nb) {
-      return !(opts.deadEnds && opts.deadEnds[deadKey(nb, opts.exactDead)]);
+      return !(opts.deadEnds && opts.deadEnds[deadKey(nb, opts.exactDead || healing)]);
     }
 
     // A rest state must stay playable: some legal move that doesn't
@@ -603,11 +603,6 @@
     // (the same ledger gives the known 519 for the 2048 tile). A score
     // run ignores the flag: max score wants the opposite dial - all 2s.
     this.perfect = !!(opts && opts.perfect) && this.goal !== "score";
-    // Family dead-end keys erase smalls; wherever consecutive
-    // legitimate rests differ only by small placements (a 4-only build,
-    // a score run's dense second act) one mark poisons the next stretch
-    // and the cascade ends in a restart. Those regimes use exact keys.
-    this.exactDead = this.perfect || this.goal === "score";
     this.S = snakeCells(corner);
     this.collapseMemo = {};
     this.certMemo = {};
@@ -662,8 +657,20 @@
   // certifications that relied on it self-correct: the next visit hits
   // the (memoized, instant) failed plan and marks that state dead too,
   // propagating the dead zone backward one checkpoint at a time.
+  // Family keys where smalls are transient noise (the sprint build,
+  // a score run's first act): one mark diverts a whole family of
+  // doomed rests, which is what makes backtracking converge there.
+  // Exact keys where smalls are the substance (a 4-only perfect build,
+  // the second act's dense small-differentiated rests): a family mark
+  // there condemns the next stretch of legitimate checkpoints and the
+  // poisoning cascades. Getting this split wrong livelocks either way.
+  SuperAI.prototype.exactDeadFor = function (board) {
+    return this.perfect ||
+           (this.goal === "score" && board[this.S[0]] >= 131072);
+  };
+
   SuperAI.prototype.markDeadEnd = function (board) {
-    this.deadEnds[deadKey(board, this.exactDead)] = true;
+    this.deadEnds[deadKey(board, this.exactDeadFor(board))] = true;
   };
 
   function boardDead(b) {
