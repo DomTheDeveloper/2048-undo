@@ -27,8 +27,12 @@ the whole chain folds into **131072**, the highest tile 2048's rules allow.
     perfect game.
   - **🔮 PREDICTABLE** — the AI decides which tile comes next *and where
     it lands*. Zero undos, zero luck.
-  - **👑 PERFECT** — the move-minimal game: every spawn from the very
-    first two tiles is a 4, and the run finishes in **exactly 32,781
+  - **👑 PERFECT** — the move-minimal game, *computed rather than
+    played*: it always runs as pure matrix data (no rendering — the
+    board dims and holds still until the finished position lands), the
+    game only ever moves forward (**zero undos** — the search explores
+    in simulation, never on the board), every spawn from the very first
+    two tiles is a 4, and the surviving line is **exactly 32,781
     moves** — the provable minimum (derivation below).
 - The finale always plays out in slow motion. It's the money shot.
 
@@ -113,8 +117,9 @@ So the two perfections pull the same lever opposite ways: **spawn 4s
 for the fewest moves, spawn 2s for the most points.** One dial, both
 extremes, and SUPER MODE plays each of them to its bound.
 
-`PERFECT=1 node test/run.js br` proves the move count: the harness
-asserts the surviving line is exactly 32,781 moves.
+`PERFECT=1 node test/run.js br` proves the move count: it computes
+the game as pure data and asserts the surviving line is exactly
+32,781 moves with zero undos.
 
 References: [The Mathematics of 2048: Minimum Moves to Win with Markov
 Chains](https://jdlm.info/articles/2017/08/05/markov-chain-2048.html)

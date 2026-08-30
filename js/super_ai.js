@@ -1006,9 +1006,14 @@
     this.ai = new SuperAI(corner, { goal: options.goal,
                                     perfect: options.perfect });
     this.goal = this.ai.goal;
-    this.predictable = !!options.predictable;
+    // Perfect play is forward-only by definition; it never pays the
+    // undo trick because it never needs it.
+    this.predictable = !!options.predictable || this.ai.perfect;
+    // moves counts the SURVIVING line — the game as actually played.
+    // Search backtracking rewinds it (simulation, not undos); explored
+    // counts every applied step, kept or not, as the work meter.
     this.stats = { moves: 0, attempts: 0, undos: 0, backtracks: 0,
-                   restarts: 0, score: 0 };
+                   restarts: 0, score: 0, explored: 0 };
     this.board = this.freshBoard();
     this.hist = [];
     this.backStep = 4;
@@ -1070,6 +1075,8 @@
         if (!this.hist.length) {
           this.stats.restarts++;
           this.board = this.freshBoard();
+          this.stats.moves = 0;
+          this.stats.score = 0;
           this.unwinding = false;
           this.backStep = 4;
           continue;
@@ -1085,8 +1092,11 @@
           this.unwinding = true;
         }
         while (back-- > 0 && this.hist.length) {
-          this.board = this.hist.pop();
-          this.stats.undos++;
+          var h1 = this.hist.pop();
+          this.board = h1.b;
+          this.stats.moves--;
+          this.stats.score -= h1.g;
+          if (!this.predictable) this.stats.undos++;
         }
         // Skip planning on obviously wrecked mid-line intermediates —
         // except in a score run's second act, where stranded tiles are
@@ -1094,8 +1104,11 @@
         if (!(this.goal === "score" && this.board[this.S[0]] >= 131072)) {
           while (this.hist.length &&
                  analyze(this.board, this.S, true).stranded) {
-            this.board = this.hist.pop();
-            this.stats.undos++;
+            var h2 = this.hist.pop();
+            this.board = h2.b;
+            this.stats.moves--;
+            this.stats.score -= h2.g;
+            if (!this.predictable) this.stats.undos++;
           }
         }
         continue;
@@ -1103,16 +1116,17 @@
 
       for (var i = 0; i < plan.steps.length; i++) {
         var step = plan.steps[i];
-        this.hist.push(this.board);
-        if (this.hist.length > 600) this.hist.splice(0, 100);
         var sim = simMove(this.board, step.dir);
-        for (var mg = 0; mg < sim.merges.length; mg++) {
-          this.stats.score += sim.merges[mg];
-        }
+        var msum = 0;
+        for (var mg = 0; mg < sim.merges.length; mg++) msum += sim.merges[mg];
+        this.hist.push({ b: this.board, g: msum });
+        if (this.hist.length > 600) this.hist.splice(0, 100);
+        this.stats.score += msum;
         this.place(step, sim.board);
         sim.board[step.cell] = step.value;
         this.board = sim.board;
         this.stats.moves++;
+        this.stats.explored++;
         this.unwinding = false;
         var phi = analyze(this.board, this.S, true).structPhi;
         if (phi > this.bestPhi) { this.bestPhi = phi; this.backStep = 4; }

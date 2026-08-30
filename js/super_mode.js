@@ -184,7 +184,8 @@
         return;
       }
       var now = Date.now();
-      if (now - controller.headlessLastRender > 120) {
+      if (controller.mode !== "perfect" &&
+          now - controller.headlessLastRender > 120) {
         controller.headlessLastRender = now;
         renderSnapshot(msg.board, msg.stats.score);
       }
@@ -200,6 +201,9 @@
                          perfect: controller.mode === "perfect" });
 
     document.body.classList.add("super-running");
+    if (controller.mode === "perfect") {
+      document.body.classList.add("super-computing");
+    }
     updateControls();
     // Just keep the clock ticking; progress messages drive everything else.
     controller.pumpId = setInterval(function () {
@@ -209,7 +213,12 @@
 
   function startRun() {
     if (controller.running) return;
-    if (controller.speed === "headless") { startHeadless(); return; }
+    // PERFECT is computed, never driven: pure matrix data, no grid
+    // rendering, no undos — whatever speed chip is lit.
+    if (controller.speed === "headless" || controller.mode === "perfect") {
+      startHeadless();
+      return;
+    }
     var g = gm();
     if (!g) return;
 
@@ -300,6 +309,7 @@
     }
     removeHooks();
     document.body.classList.remove("super-running");
+    document.body.classList.remove("super-computing");
     render();
     updateControls();
     updateHud(why === "won");
@@ -435,15 +445,20 @@
       setStatus("FINALE — folding the spiral into 131072…");
     } else if (controller.running && !d && hs) {
       var hmax = hs.board ? Super.maxTile(hs.board) : 0;
-      var mps = hs.elapsed > 500
-        ? " at " + fmtInt(Math.round(st.moves / (hs.elapsed / 1000))) + " moves/s"
-        : "";
-      setStatus("headless — pure data, no rendering" + mps +
-        " — largest tile " + fmtInt(hmax) +
-        (controller.goal === "score"
-          ? " — score " + fmtInt(st.score) + " / 3,932,156"
-          : controller.mode === "perfect"
-          ? " — move " + fmtInt(st.moves) + " of 32,781" : ""));
+      if (controller.mode === "perfect" && controller.goal !== "score") {
+        setStatus("computing the perfect game — move " + fmtInt(st.moves) +
+          " of 32,781 — zero undos, by construction — " +
+          fmtInt(st.explored || 0) + " states searched — largest tile " +
+          fmtInt(hmax));
+      } else {
+        var mps = hs.elapsed > 500
+          ? " at " + fmtInt(Math.round(st.moves / (hs.elapsed / 1000))) + " moves/s"
+          : "";
+        setStatus("headless — pure data, no rendering" + mps +
+          " — largest tile " + fmtInt(hmax) +
+          (controller.goal === "score"
+            ? " — score " + fmtInt(st.score) + " / 3,932,156" : ""));
+      }
     } else if (controller.running) {
       var thinking = controller.plannerBusySince &&
         Date.now() - controller.plannerBusySince > 400;
@@ -463,7 +478,11 @@
     $(".super-toggle .super-toggle-label").textContent =
       controller.running ? "STOP" : "SUPER MODE";
     $all(".super-speed").forEach(function (el) {
-      el.classList.toggle("selected", el.getAttribute("data-speed") === controller.speed);
+      el.classList.toggle("selected",
+        controller.mode === "perfect"
+          ? el.getAttribute("data-speed") === "headless"
+          : el.getAttribute("data-speed") === controller.speed);
+      el.classList.toggle("disabled", controller.mode === "perfect");
     });
     $all(".super-corner-cell").forEach(function (el) {
       el.classList.toggle("selected", el.getAttribute("data-corner") === controller.corner);
@@ -502,11 +521,13 @@
                                : controller.headless.stats;
     var el = $(".super-win");
     var how = controller.mode === "perfect"
-      ? "in the mathematically minimal number of moves"
+      ? "computed as pure data: exactly 32,781 moves, zero undos"
       : controller.mode === "predictable"
       ? "every tile chosen and placed by design"
       : "capped off by a spawned&nbsp;4";
-    if (controller.speed === "headless") how += ", all as pure matrix data";
+    if (controller.mode !== "perfect" && controller.speed === "headless") {
+      how += ", all as pure matrix data";
+    }
     if (controller.goal === "score") {
       $(".super-win h2").textContent = fmtInt(gm().score);
       $(".super-win-sub").innerHTML =

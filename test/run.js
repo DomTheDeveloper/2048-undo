@@ -58,17 +58,60 @@ function fmt(b) {
   return rows.join("\n");
 }
 
+// The perfect game is computed, not driven: pure matrix data, forward
+// only. The search explores internally; the line that survives IS the
+// game — exactly 32,781 moves, zero undos, by the mass ledger.
+function runPerfect(corner) {
+  var t0 = Date.now();
+  var runner = new Super.HeadlessRunner(corner,
+    { goal: "tile", perfect: true, predictable: true });
+  var MAX_MS = (Number(process.env.MAX_MIN) || 70) * 60 * 1000;
+  var lastBeat = 0;
+  while (!runner.run(1000)) {
+    if (Date.now() - lastBeat > 15000) {
+      lastBeat = Date.now();
+      console.log("[" + corner + "] beat line=" + runner.stats.moves +
+        " explored=" + runner.stats.explored +
+        " backtracks=" + runner.stats.backtracks +
+        " restarts=" + runner.stats.restarts +
+        " max=" + Super.maxTile(runner.board) +
+        " " + ((Date.now() - t0) / 1000).toFixed(1) + "s");
+    }
+    if (Date.now() - t0 > MAX_MS) {
+      console.error("[" + corner + "] time budget exceeded");
+      console.error(fmt(runner.board));
+      return false;
+    }
+  }
+  var b = runner.board;
+  var S = Super.snakeCells(corner);
+  var ok = b[S[0]] === 131072 &&
+           runner.stats.moves === 32781 &&
+           runner.stats.undos === 0;
+  console.log("[" + corner + "] PERFECT DONE in " +
+    ((Date.now() - t0) / 1000).toFixed(1) + "s" +
+    "  line=" + runner.stats.moves + " (minimum 32,781)" +
+    "  undos=" + runner.stats.undos +
+    "  explored=" + runner.stats.explored +
+    "  backtracks=" + runner.stats.backtracks +
+    "  restarts=" + runner.stats.restarts +
+    "  score=" + runner.stats.score);
+  console.log(fmt(b));
+  if (!ok) console.error("[" + corner + "] FAIL: want 131072 in " + corner +
+    ", line === 32781, undos === 0");
+  return ok;
+}
+
 function runCorner(corner) {
+  if (process.env.PERFECT === "1") return runPerfect(corner);
   var t0 = Date.now();
   var game = makeGame();
   var gm = game.gm;
 
   var goal = process.env.GOAL === "score" ? "score" : "tile";
-  var perfect = process.env.PERFECT === "1";
   var driver = new Super.SuperDriver(gm, corner, game.Tile,
     { verify: true, trace: process.env.TRACE === "1",
-      predictable: process.env.PREDICTABLE === "1" || perfect,
-      perfect: perfect,
+      predictable: process.env.PREDICTABLE === "1",
       goal: goal });
   driver.attach();
   gm.restart(); // fresh board through the patched spawner
@@ -165,18 +208,6 @@ function runCorner(corner) {
       " (ceiling 3,932,156)  dead=" + dead);
   } else {
     ok = b[S[0]] === 131072;
-    if (perfect) {
-      // The mass ledger makes this a theorem, not a hope: with every
-      // build spawn a 4, the surviving line is exactly 32,766 build
-      // moves + 15 collapse moves. (Undone moves don't count; in
-      // predictable play every undo removed one accepted move. A
-      // restart would reset the line, so the equality only binds on
-      // restart-free runs.)
-      var net = driver.stats.moves - driver.stats.undos;
-      console.log("[" + corner + "] perfect-goal: net moves=" + net +
-        " (theoretical minimum 32,781; restarts=" + driver.stats.restarts + ")");
-      ok = ok && (driver.stats.restarts > 0 || net === 32781);
-    }
   }
   console.log("[" + corner + "] DONE in " + ((Date.now() - t0) / 1000).toFixed(1) + "s" +
     "  moves=" + driver.stats.moves +

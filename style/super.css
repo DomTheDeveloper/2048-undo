@@ -307,3 +307,11 @@
   background: #6f5bd6;
   color: #f9f6f2;
 }
+
+/* A perfect game is computed, not watched: the board dims and holds
+   still until the finished position lands. */
+.super-computing .game-container {
+  opacity: 0.3;
+  filter: saturate(0.4);
+  transition: opacity 0.4s ease, filter 0.4s ease;
+}
