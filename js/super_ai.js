@@ -565,6 +565,16 @@
     { depth: 20, floats: 6, leaked: 2, nodes: 3e6, allCells: true }
   ];
 
+  // A 4-only spawn menu halves the branching but also halves the line
+  // supply: strict-4 sub-builds routinely need the extra plies that
+  // [4,2] play resolves with a well-placed 2. Perfect mode gets one
+  // deeper tier before conceding a backtrack — a failed plan costs
+  // hundreds of churned moves, so the extra search is cheap by
+  // comparison.
+  var PERFECT_TIERS = SEARCH_TIERS.concat([
+    { depth: 26, floats: 6, leaked: 2, nodes: 1e7, allCells: true }
+  ]);
+
   // goal "tile"  — sprint to 131072 (4-feeds, fastest finish; the game
   //                ends the moment the corner holds 131072).
   // goal "score" — the maximum-score run: 2-feeds only (every spawned 4
@@ -682,8 +692,9 @@
     }
 
     var line = null;
-    for (var ti = 0; ti < SEARCH_TIERS.length && !line; ti++) {
-      line = buildSearch(board, S, this.opts(SEARCH_TIERS[ti]), this.certMemo);
+    var tiers = this.perfect ? PERFECT_TIERS : SEARCH_TIERS;
+    for (var ti = 0; ti < tiers.length && !line; ti++) {
+      line = buildSearch(board, S, this.opts(tiers[ti]), this.certMemo);
     }
     if (!line) {
       this.planFail[pfKey] = true;
