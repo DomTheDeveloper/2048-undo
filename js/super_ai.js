@@ -658,7 +658,7 @@
     var o = {};
     for (var k in base) o[k] = base[k];
     o.deadEnds = this.deadEnds;
-    o.exactDead = this.exactDead;
+    o.exactDead = this.perfect;
     o.pair44 = this.perfect;
     o.goal = this.goal;
     // Sprint feeds 4s (twice the mass per move); a score run feeds 2s —
