@@ -526,39 +526,77 @@
   // must merge exactly one pair (value >= 8, i.e. chain material) and the
   // spawn refills the single freed cell; only its value (2 vs 4) needs
   // choosing so garbage never lines up into an accidental merge.
+  // The collapse: fold the primed spiral into 131072. Unlike the 2048
+  // tile's collapse (whose primed board keeps five empty cells of
+  // slack), the 131072 chain fills the board COMPLETELY, so every
+  // spawn during the fold lands on the cascade's path. Junk sometimes
+  // has to be consolidated (2+2) in moves of their own before the
+  // cascade can continue, which is why the fold takes MORE than the 15
+  // forced merges. The true minimum is a constant of the game, and
+  // this search finds it: iterative deepening over total length, where
+  // each move either advances the cascade by exactly the next doubling
+  // (8, 16, ... 131072, at most one junk merge alongside) or is a pure
+  // junk-consolidation move (2+2 merges only, cascade untouched).
   function collapseSearch(b, S, memo, mustContinue) {
-    // Success means 131072 ON THE CHOSEN CORNER, not merely somewhere:
-    // the final 65536+65536 merge must land at S[0]. A sprint is happy
-    // to die right there; a score run must keep playing, so its collapse
-    // has to leave the garbage with at least one legal move in it.
+    for (var budget = 15; budget <= 26; budget++) {
+      var r = collapseDFS(b, S, memo, mustContinue, 0, budget);
+      if (r) return r;
+    }
+    return null;
+  }
+
+  function collapseDFS(b, S, memo, mustContinue, prev, left) {
     if (b[S[0]] >= 131072) {
       if (!mustContinue) return [];
       return boardDead(b) ? null : [];
     }
-    if (maxTile(b) >= 131072) return null;
-    var key = b.join(",");
-    if (memo.hasOwnProperty(key)) return memo[key];
-    memo[key] = null; // cycle guard
+    if (left <= 0 || maxTile(b) >= 131072) return null;
+    var key = prev + "|" + left + "|" + b.join(",");
+    if (memo.hasOwnProperty(key)) return memo[key] || null;
+    memo[key] = false; // cycle guard / proven failure
     var result = null;
     outer:
     for (var dir = 0; dir < 4; dir++) {
       var sim = simMove(b, dir);
       if (!sim.moved) continue;
-      if (sim.merges.length !== 1 || sim.merges[0] < 8) continue;
+      // Classify merges against the cascade's expectation: exactly the
+      // next doubling advances the fold; anything below it is junk
+      // consolidating behind the front (2s into 4s into 8s — the more
+      // the junk crushes down, the more slack the fold gets); anything
+      // above it would be an out-of-order merge and poisons the move.
+      var expected = prev ? prev * 2 : 8;
+      var casc = 0, junk = 0, badBig = false;
+      for (var mi = 0; mi < sim.merges.length; mi++) {
+        var mv = sim.merges[mi];
+        if (mv === expected) casc++;
+        else if (mv < expected) junk++;
+        else badBig = true;
+      }
+      if (badBig) continue;
+      var nextPrev;
+      if (casc === 1 && junk <= 1) {
+        nextPrev = expected; // cascade advances
+      } else if (casc === 0 && junk >= 1 && junk <= 2) {
+        nextPrev = prev;     // junk consolidation
+      } else {
+        continue;
+      }
       var empt = emptyCells(sim.board);
-      if (empt.length !== 1) continue;
-      for (var vi = 0; vi < 2; vi++) {
-        var val = vi === 0 ? 2 : 4; // 2 first: 9x cheaper to sample
-        var nb = sim.board.slice();
-        nb[empt[0]] = val;
-        var sub = collapseSearch(nb, S, memo, mustContinue);
-        if (sub) {
-          result = [{ dir: dir, cell: empt[0], value: val }].concat(sub);
-          break outer;
+      if (empt.length < 1 || empt.length > 3) continue;
+      for (var ei = 0; ei < empt.length; ei++) {
+        for (var vi = 0; vi < 2; vi++) {
+          var val = vi === 0 ? 2 : 4; // 2 first: 9x cheaper to sample
+          var nb = sim.board.slice();
+          nb[empt[ei]] = val;
+          var sub = collapseDFS(nb, S, memo, mustContinue, nextPrev, left - 1);
+          if (sub) {
+            result = [{ dir: dir, cell: empt[ei], value: val }].concat(sub);
+            break outer;
+          }
         }
       }
     }
-    memo[key] = result;
+    memo[key] = result || false;
     return result;
   }
 
