@@ -650,6 +650,7 @@
     this.perfect = !!(opts && opts.perfect) && this.goal !== "score";
     this.S = snakeCells(corner);
     this.collapseMemo = {};
+    this.foldCache = {};
     this.certMemo = {};
     this.deadEnds = {};
     this.planFail = {};
@@ -739,20 +740,34 @@
       }
     }
 
-    // Finale: the primed spiral means we're folding. The top of the
-    // chain must actually be seated — a board that merely happens to be
-    // full during a 65536-era feed cycle is not a fold candidate, and
-    // asking the fold search about it is expensive.
-    if (board[S[0]] === 65536 && board[S[1]] === 32768 &&
-        board[S[2]] === 16384 && board[S[3]] === 8192 &&
-        emptyCells(board).length === 0) {
-      var script = collapseSearch(board, S, this.collapseMemo,
-                                  this.goal === "score");
+    // Finale: the fold only ever starts from ONE board — the primed
+    // spiral the build is defined to deliver (65536 ... 4 down the
+    // snake, a spawned 4 in the last cell). The fold search is a
+    // 17-million-node, gigabyte-memo affair, so it runs exactly once:
+    // any other full board near the top is mid-feed churn and gets the
+    // ordinary build search instead.
+    var primed = board[S[15]] === 4;
+    if (primed) {
+      for (var pi = 0; pi <= 14; pi++) {
+        if (board[S[pi]] !== (1 << (16 - pi))) { primed = false; break; }
+      }
+    }
+    if (primed) {
+      var fKey = board.join(",");
+      var script = this.foldCache[fKey];
+      if (!script) {
+        script = collapseSearch(board, S, this.collapseMemo,
+                                this.goal === "score");
+        if (script && script.length) {
+          this.foldCache[fKey] = script;
+          this.collapseMemo = {}; // release the search's giant memo
+        }
+      }
       if (script && script.length) {
         return { type: "line", steps: script, phase: "finale" };
       }
-      // A full board that isn't collapsible would be a build accident;
-      // fall through to the search so it can dig itself out.
+      // A primed board that isn't collapsible would be a build
+      // accident; fall through so the search can dig itself out.
     }
 
     // Failed full searches are final for a given board (dead ends only
