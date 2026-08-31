@@ -423,14 +423,16 @@
     // ordinary catch-up. With no bigs below the corner yet, 16 is the
     // consolidation scale the bootstrap swamp needs.
     function inversionOK(nb, ana) {
-      var last = 0, prev = 0;
+      var last = 0;
       for (var i = 1; i < ana.packedLen; i++) {
-        var v = nb[S[i]];
-        if (v >= 8) { prev = last; last = v; }
+        if (nb[S[i]] >= 8) last = nb[S[i]];
       }
-      var bound = !last ? 16
-                : (prev && last * 2 < prev) ? prev
-                : (last > 16 ? last : 16);
+      // A genuine catch-up stays within a few doublings of what waits
+      // for it; anything farther is a wedge the tail can never grow to
+      // meet (v13 blessed an 8 at S2 "growing toward" a 16384 — ten
+      // doublings of fantasy). Three doublings is the working span,
+      // and 16 is the consolidation scale before any big exists.
+      var bound = last * 8 > 16 ? last * 8 : 16;
       for (var j = ana.packedLen; j < CELLS; j++) {
         var w = nb[S[j]];
         if (w >= 8 && w > bound) return false;
