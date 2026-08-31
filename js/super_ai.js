@@ -413,6 +413,32 @@
     }
     var startMisplaced = misplacedOf(b0);
 
+    // The inversion guard: material waiting beyond the walk must fit
+    // UNDER the walk's own big tiles. A rest like [131072, 16 | ...,
+    // 16384, 8192] wedges a lightweight at S1 and builds the real
+    // chain behind it — legal to every other rule, and ten hours of
+    // undo cannot unbuild it. The bar is the last big below the
+    // corner; while that big is mid-growth (less than half its
+    // predecessor) the predecessor sets the bar instead — that is the
+    // ordinary catch-up. With no bigs below the corner yet, 16 is the
+    // consolidation scale the bootstrap swamp needs.
+    function inversionOK(nb, ana) {
+      var last = 0, prev = 0;
+      for (var i = 1; i < ana.packedLen; i++) {
+        var v = nb[S[i]];
+        if (v >= 8) { prev = last; last = v; }
+      }
+      var bound = !last ? 16
+                : (prev && last * 2 < prev) ? prev
+                : (last > 16 ? last : 16);
+      for (var j = ana.packedLen; j < CELLS; j++) {
+        var w = nb[S[j]];
+        if (w >= 8 && w > bound) return false;
+      }
+      return true;
+    }
+    var startInversion = inversionOK(b0, start);
+
     function isGoal(ana, nb, gained) {
       var extras = 0;
       var canon = !ana.stranded;
@@ -441,6 +467,7 @@
              ana.bigMass >= start.bigMass &&
              extras - ana.train <= (startLoose > 3 ? startLoose : 3) &&
              misplacedOf(nb) <= (startMisplaced > 1 ? startMisplaced : 1) &&
+             (inversionOK(nb, ana) || !startInversion) &&
              snakeCompact(nb) &&
              continuable(nb, 1e9);
     }
