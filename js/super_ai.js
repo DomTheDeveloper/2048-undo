@@ -303,7 +303,7 @@
     // is simply the next plan's problem; the dead-end family blacklist
     // plus undo-backtracking referee everything else.
     function certify(nb) {
-      return !(opts.deadEnds && opts.deadEnds[deadKey(nb, opts.exactDead || healing)]);
+      return !(opts.deadEnds && opts.deadEnds[deadKey(nb, opts.exactDead)]);
     }
 
     // A rest state must stay playable: some legal move that doesn't
@@ -710,9 +710,12 @@
   // the second act's dense small-differentiated rests): a family mark
   // there condemns the next stretch of legitimate checkpoints and the
   // poisoning cascades. Getting this split wrong livelocks either way.
+  // (The second act runs on family keys too: its dead ends differ only
+  // by where the feed 2s sit — an astronomical family that exact keys
+  // can never converge on, as a budget-long two-board oscillation
+  // proved. The healing rest rules were validated under family marks.)
   SuperAI.prototype.exactDeadFor = function (board) {
-    return this.perfect ||
-           (this.goal === "score" && board[this.S[0]] >= 131072);
+    return this.perfect;
   };
 
   SuperAI.prototype.markDeadEnd = function (board) {
