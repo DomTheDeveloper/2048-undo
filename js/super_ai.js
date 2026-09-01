@@ -397,7 +397,12 @@
     // the post-collapse swamp still has many).
     function misplacedOf(nb) {
       // Only the ordered structure before the first hole sets the bar;
-      // workshop bigs past it are order-free and wall nothing in.
+      // workshop bigs past it are order-free and wall nothing in. The
+      // single exemption the cap grants is for a GROWABLE tail — and a
+      // small can only grow to meet what follows it when that material
+      // is within a few doublings (<= 32). A 4 parked beside the
+      // corner with an 8192 behind it is not a tail, it is a wedge,
+      // and it counts double so no cap ever blesses it.
       var lastBig = -1;
       for (var i = 0; i < CELLS; i++) {
         var v = nb[S[i]];
@@ -407,7 +412,15 @@
       var n = 0;
       for (var j = 0; j < lastBig; j++) {
         var w = nb[S[j]];
-        if (w > 0 && w <= 4) n++;
+        if (w > 0 && w <= 4) {
+          n++;
+          for (var k = j + 1; k <= lastBig; k++) {
+            if (nb[S[k]] >= 8) {
+              if (nb[S[k]] > 32) n++;
+              break;
+            }
+          }
+        }
       }
       return n;
     }
