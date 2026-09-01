@@ -93,7 +93,7 @@ function runControlled(name, place) {
       } else {
         ai.markDeadEnd(b);
         back = Math.min(backStep, hist.length);
-        backStep = Math.min(backStep * 2, 512);
+        backStep = Math.min(backStep * 2, 2048);
         stats.backtracks++;
         unwinding = true;
       }
@@ -115,7 +115,7 @@ function runControlled(name, place) {
     for (var i = 0; i < plan.steps.length; i++) {
       var step = plan.steps[i];
       hist.push(b);
-      if (hist.length > 600) hist.splice(0, 100);
+      if (hist.length > 3000) hist.splice(0, 100);
       var sim = Super.simMove(b, step.dir);
       var post = sim.board;
       for (var mg = 0; mg < sim.merges.length; mg++) stats.score += sim.merges[mg];

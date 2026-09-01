@@ -1025,7 +1025,7 @@
           this.ai.markDeadEnd(board);
           if (this.options.onDeadEnd) this.options.onDeadEnd(board);
           back = Math.min(this.backtrackStep, gm.undoStack.length);
-          this.backtrackStep = Math.min(this.backtrackStep * 2, 512);
+          this.backtrackStep = Math.min(this.backtrackStep * 2, 2048);
           this.stats.backtracks++;
           this.unwinding = true;
         }
@@ -1115,7 +1115,7 @@
 
     // Keep the fork's unbounded undo stack from hoarding memory over a
     // ~33k-move run; the AI only ever needs one level.
-    if (gm.undoStack && gm.undoStack.length > 600) gm.undoStack.splice(0, 500);
+    if (gm.undoStack && gm.undoStack.length > 3000) gm.undoStack.splice(0, 500);
 
     return { type: "accepted",
              phase: primed ? "primed" : cache.phase };
@@ -1243,7 +1243,7 @@
         } else {
           this.ai.markDeadEnd(b);
           back = Math.min(this.backStep, this.hist.length);
-          this.backStep = Math.min(this.backStep * 2, 512);
+          this.backStep = Math.min(this.backStep * 2, 2048);
           this.stats.backtracks++;
           this.unwinding = true;
         }
@@ -1276,7 +1276,7 @@
         var msum = 0;
         for (var mg = 0; mg < sim.merges.length; mg++) msum += sim.merges[mg];
         this.hist.push({ b: this.board, g: msum });
-        if (this.hist.length > 600) this.hist.splice(0, 100);
+        if (this.hist.length > 3000) this.hist.splice(0, 100);
         this.stats.score += msum;
         this.place(step, sim.board);
         sim.board[step.cell] = step.value;
