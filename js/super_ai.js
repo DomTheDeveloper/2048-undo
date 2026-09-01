@@ -135,6 +135,7 @@
   //   leaked   - tiles <= 4 far from the frontier (mass drifting away)
   //   stranded - any tile >= 8 outside the packed chain (real damage)
   function analyze(b, S, loose, shop, pair44) {
+    var N = S.length; // 16 for the full snake, 15 for the second act
     var prefixPhi = 0;
     var bigMass = 0;
     var structPhi = 0;
@@ -143,7 +144,7 @@
     var pair4Used = false;
     var pairAt = -1;
     var packedLen = 0;
-    while (packedLen < CELLS) {
+    while (packedLen < N) {
       var v = b[S[packedLen]];
       if (v === 0) break;
       if (v > prev) break;
@@ -229,7 +230,7 @@
     var trainPrev = -1;
     var inSmalls = false;
     var workshop = false;
-    for (var j = packedLen; j < CELLS; j++) {
+    for (var j = packedLen; j < N; j++) {
       var jv = b[S[j]];
       if (jv === 0) { if (shop) workshop = true; continue; }
       if (jv <= 4) { floats++; inSmalls = true; continue; }
@@ -240,7 +241,7 @@
         continue;
       }
       var limit = trainPrev >= 0 ? trainPrev : headOK;
-      if (jv <= limit && (!inSmalls || j === CELLS - 1)) {
+      if (jv <= limit && (!inSmalls || j === N - 1)) {
         floats++;
         train++;
         bigMass += jv;
@@ -282,6 +283,7 @@
   // deterministic construction with backtracking; memoized failures keep
   // the worst case bounded.
   function buildSearch(b0, S, opts, certMemo) {
+    var N = S.length;
     var loose = !opts.strictPairs;
     // The healing regime (a score run's second act) reads boards with
     // workshop rules; the sprint classifier must stay byte-identical,
@@ -293,7 +295,7 @@
     var budget = { nodes: opts.nodes };
     var failed = {};
     var si = {};
-    for (var i = 0; i < CELLS; i++) si[S[i]] = i;
+    for (var i = 0; i < N; i++) si[S[i]] = i;
 
     // Certified checkpoints: a rest state only counts if a (cheaper,
     // memoized) follow-up search proves it can improve again. Traps are
@@ -332,7 +334,7 @@
     // lines — every historic wall of this project fell to this shape.
     function countExtras(nb, packedLen) {
       var n = 0;
-      for (var q = packedLen; q < CELLS; q++) {
+      for (var q = packedLen; q < N; q++) {
         if (nb[S[q]] !== 0) n++;
       }
       return n;
@@ -342,8 +344,12 @@
     // The one board a score run is allowed to die on: every cell holding
     // the full descending chain 131072..4 — the maximum-score death.
     function maxDeath(nb) {
-      for (var i = 0; i < CELLS; i++) {
-        if (nb[S[i]] !== (1 << (17 - i))) return false;
+      // Full snake: 131072 down to 4. Sub-snake (second act): 65536
+      // down to 4 — and then the whole board IS the maximum-score
+      // death, since 131072 fills the one cell the sub-snake skips.
+      var top = N === 16 ? 131072 : 65536;
+      for (var i = 0; i < N; i++) {
+        if (nb[S[i]] !== (top >> i)) return false;
       }
       return true;
     }
@@ -378,7 +384,7 @@
     function snakeCompact(nb) {
       var hole = false;
       var out = 0;
-      for (var i = 0; i < CELLS; i++) {
+      for (var i = 0; i < N; i++) {
         var v = nb[S[i]];
         if (v === 0) { hole = true; continue; }
         if (hole && v >= 16 && ++out > 1) return false;
@@ -404,7 +410,7 @@
       // corner with an 8192 behind it is not a tail, it is a wedge,
       // and it counts double so no cap ever blesses it.
       var lastBig = -1;
-      for (var i = 0; i < CELLS; i++) {
+      for (var i = 0; i < N; i++) {
         var v = nb[S[i]];
         if (v === 0) break;
         if (v >= 8) lastBig = i;
@@ -446,7 +452,7 @@
       // doublings of fantasy). Three doublings is the working span,
       // and 16 is the consolidation scale before any big exists.
       var bound = last * 8 > 16 ? last * 8 : 16;
-      for (var j = ana.packedLen; j < CELLS; j++) {
+      for (var j = ana.packedLen; j < N; j++) {
         var w = nb[S[j]];
         if (w >= 8 && w > bound) return false;
       }
@@ -457,7 +463,7 @@
     function isGoal(ana, nb, gained) {
       var extras = 0;
       var canon = !ana.stranded;
-      for (var q = ana.packedLen; q < CELLS; q++) {
+      for (var q = ana.packedLen; q < N; q++) {
         var qv = nb[S[q]];
         if (qv === 0) continue;
         extras++;
@@ -509,7 +515,7 @@
 
     function spawnCells(post, packedLen) {
       var out = [];
-      var lim = opts.allCells ? CELLS - 1 : Math.min(CELLS - 1, packedLen + 4);
+      var lim = opts.allCells ? N - 1 : Math.min(N - 1, packedLen + 4);
       for (var k = 0; k <= lim; k++) {
         var c = S[k];
         if (post[c] === 0) out.push(c);
@@ -542,6 +548,8 @@
             var nb = post.board.slice();
             nb[spawns[e]] = val;
             if (healing && !anchorOK(nb)) continue;
+            if (opts.anchorCell !== undefined &&
+                nb[opts.anchorCell] !== opts.anchorValue) continue;
             var ana = analyze(nb, S, loose, healing, pair44);
             var step = { dir: post.dir, cell: spawns[e], value: val };
             if (isGoal(ana, nb, gained + post.msum) && certify(nb)) return [step];
@@ -691,6 +699,9 @@
     // run ignores the flag: max score wants the opposite dial - all 2s.
     this.perfect = !!(opts && opts.perfect) && this.goal !== "score";
     this.S = snakeCells(corner);
+    // The second act is a fresh sprint on the 15 cells the 131072
+    // doesn't occupy: same machine, one cell shorter.
+    this.subS = this.S.slice(1);
     this.collapseMemo = {};
     this.foldCache = {};
     this.certMemo = {};
@@ -822,10 +833,40 @@
       return { type: "stuck", reason: "no line to a checkpoint" };
     }
 
+    // Second act: with 131072 home, the rest of the game is a fresh
+    // sprint on the other fifteen cells — the same machine that builds
+    // 65536 from nothing at a percent of churn. The healing regime only
+    // bridges the post-fold swamp; once the sub-board reads as a build
+    // position (nothing stranded, junk down to feed scale), the proven
+    // canon machinery takes over on the sub-snake, with the corner
+    // pinned as a hard anchor.
+    var useS = S;
+    var anchored = false;
+    if (this.goal === "score" && board[S[0]] === 131072) {
+      var subAna = analyze(board, this.subS, true);
+      var subExtras = 0;
+      for (var se = subAna.packedLen; se < this.subS.length; se++) {
+        if (board[this.subS[se]] !== 0) subExtras++;
+      }
+      if (subAna.stranded === 0 && subExtras - subAna.train <= 2) {
+        useS = this.subS;
+        anchored = true;
+      }
+    }
+
     var line = null;
     var tiers = this.perfect ? PERFECT_TIERS : SEARCH_TIERS;
     for (var ti = 0; ti < tiers.length && !line; ti++) {
-      line = buildSearch(board, S, this.opts(tiers[ti]), this.certMemo);
+      var o = this.opts(tiers[ti]);
+      if (anchored) { o.anchorCell = S[0]; o.anchorValue = 131072; }
+      line = buildSearch(board, useS, o, this.certMemo);
+    }
+    if (!line && anchored) {
+      // The sub-sprint found nothing from here; let the healing regime
+      // (full snake) have a look before conceding a dead end.
+      for (var t2 = 0; t2 < tiers.length && !line; t2++) {
+        line = buildSearch(board, S, this.opts(tiers[t2]), this.certMemo);
+      }
     }
     if (!line) {
       this.planFail[pfKey] = true;
