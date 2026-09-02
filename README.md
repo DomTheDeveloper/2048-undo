@@ -30,10 +30,14 @@ the whole chain folds into **131072**, the highest tile 2048's rules allow.
   - **👑 PERFECT** — the move-minimal game, *computed rather than
     played*: it always runs as pure matrix data (no rendering — the
     board dims and holds still until the finished position lands), the
-    game only ever moves forward (**zero undos** — the search explores
-    in simulation, never on the board), every spawn from the very first
-    two tiles is a 4, and the surviving line is **exactly 32,781
-    moves** — the provable minimum (derivation below).
+    game only ever moves forward (**zero undos**), every spawn from the
+    very first two tiles is a 4, and the line is **exactly 32,781
+    moves** — the provable minimum (derivation below). It isn't even
+    searched at runtime: the perfect game is a *constant of 2048*, so
+    it was generated once (`test/gen_perfect.js`), shipped as 65KB of
+    data (`js/perfect_line.js`), and is replayed — and re-verified,
+    move by move — through the real engine in about a tenth of a
+    second. The other three corners are the same line mirrored.
 - The finale always plays out in slow motion. It's the money shot.
 
 And a goal picker:
@@ -66,6 +70,7 @@ four runs below executing **simultaneously** (one core each):
 | bench, perfect rules | 131072 | 36,569 | 0 | 22.7 min | 1364.6s | 0.0s |
 | real engine, predictable | 131072 | 36,561 | 0 | 23.0 min | — | — |
 | real engine, super | 131072 | 36,563 | 1,785,117 | 23.0 min | — | — |
+| **PERFECT (the book)** | 131072 | **32,781** | **0** | **0.1 s** | 0s | 0.1s |
 | honest expectimax (no undo, no control) | 1024–2048 | — | — | ~2s/game | — | — |
 
 The story the numbers tell: the board engine is effectively free (1.8M
@@ -86,10 +91,21 @@ should carry the maximum +4. Feeding *only* 4s, and starting from two
 4s (mass 8), the build of the primed spiral — the full descending chain
 65536 … 4 plus one spawned 4 in the last cell, total mass exactly
 131072 — takes **exactly (131072 − 8) / 4 = 32,766 moves**, no matter
-what order the merges happen in. Then the spiral folds: the cascade
-8, 16, 32, … 131072 is 15 forced merges, one per move (a slide merges
-equal *adjacent* pairs only, and the chain offers exactly one per
-step). Total:
+what order the merges happen in. That "no matter what" is the deep
+part: since every legal all-4 move adds exactly 4 mass and the spiral's
+mass is fixed, *any* route that reaches it is automatically minimal —
+minimality is forced by the ledger, and only *reachability* has to be
+constructed. The generator does that by walking a binary counter along
+the snake (each move: one carry-merge, one planted 4; drop-feeds over
+the tail row; a two-slide dance where the top row has no room), which
+is also a tidy accounting identity: the tile count (2 at the start, 16
+at the death of the build, +1 per spawn, −1 per merge) says the build
+performs exactly 32,752 merges across its 32,766 moves — carries
+almost every single move, with just a handful of merge-free
+repositioning slides. Then the spiral folds: the
+cascade 8, 16, 32, … 131072 is 15 forced merges, one per move (a slide
+merges equal *adjacent* pairs only, and the chain offers exactly one
+per step), proven minimal by exhaustive search. Total:
 
 > **minMoves(2^n) = (2^n − 8)/4 + (n − 2)**, so
 > **minMoves(131072) = 32,766 + 15 = 32,781 = 2^15 + 13.**
@@ -117,9 +133,12 @@ So the two perfections pull the same lever opposite ways: **spawn 4s
 for the fewest moves, spawn 2s for the most points.** One dial, both
 extremes, and SUPER MODE plays each of them to its bound.
 
-`PERFECT=1 node test/run.js br` proves the move count: it computes
-the game as pure data and asserts the surviving line is exactly
-32,781 moves with zero undos.
+`PERFECT=1 node test/run.js br bl tr tl` proves the move count in
+about a tenth of a second per corner: it replays the shipped line
+through the real engine — every slide must actually move, every spawn
+cell must be empty — and asserts the surviving line is exactly 32,781
+moves with zero undos. `node test/gen_perfect.js` regenerates and
+re-verifies the line from nothing.
 
 References: [The Mathematics of 2048: Minimum Moves to Win with Markov
 Chains](https://jdlm.info/articles/2017/08/05/markov-chain-2048.html)
