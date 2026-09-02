@@ -658,6 +658,68 @@
   }
 
   // ------------------------------------------------------------------
+  // The perfect book
+  // ------------------------------------------------------------------
+
+  // The perfect game is not searched at runtime — it is a computed
+  // constant of the game, generated once (test/gen_perfect.js) and
+  // shipped as data (js/perfect_line.js): 32,781 (dir, spawn-cell,
+  // spawn-value) steps for the bottom-right corner. Mass makes the
+  // length exact: slides conserve it, every legal move spawns once, so
+  // an all-4 build from the two starting 4s (mass 8) to the primed
+  // spiral (mass 131,072) is EXACTLY (131072-8)/4 = 32,766 moves no
+  // matter the route, and the proven-minimal fold adds 15. The engine
+  // still verifies every step live — the book is a line to replay, not
+  // a claim to trust.
+  //
+  // Codec: two hex chars per step; bits 0-1 dir, 2-5 cell, 6 value
+  // (0 = spawn 4, 1 = spawn 2 — 2s appear only in the fold's junk).
+  function decodePerfectLine() {
+    var data = null;
+    if (typeof module !== "undefined" && typeof require === "function") {
+      try { data = require("./perfect_line.js"); } catch (e) {}
+    }
+    if (!data && typeof PERFECT_LINE !== "undefined") data = PERFECT_LINE;
+    if (!data && global && global.PERFECT_LINE) data = global.PERFECT_LINE;
+    if (!data || !data.hex) return null;
+    var hex = data.hex;
+    var steps = new Array(hex.length >> 1);
+    for (var i = 0; i < steps.length; i++) {
+      var byte = parseInt(hex.substr(i * 2, 2), 16);
+      steps[i] = { dir: byte & 3, cell: (byte >> 2) & 15,
+                   value: (byte & 64) ? 2 : 4 };
+    }
+    return steps;
+  }
+
+  // The book is generated for br; the other corners are its exact
+  // mirror images — reflect cells and swap the mirrored directions.
+  function transformStep(step, corner) {
+    var mx = corner === "bl" || corner === "tl";
+    var my = corner === "tr" || corner === "tl";
+    var x = step.cell % 4, y = (step.cell / 4) | 0;
+    if (mx) x = 3 - x;
+    if (my) y = 3 - y;
+    var dir = step.dir;
+    if (mx && (dir === 1 || dir === 3)) dir = 4 - dir;
+    if (my && (dir === 0 || dir === 2)) dir = 2 - dir;
+    return { dir: dir, cell: y * 4 + x, value: step.value };
+  }
+
+  function perfectBook(corner) {
+    var raw = decodePerfectLine();
+    if (!raw) return null;
+    var steps = new Array(raw.length);
+    for (var i = 0; i < raw.length; i++) steps[i] = transformStep(raw[i], corner);
+    var S = snakeCells(corner);
+    var start = new Array(CELLS);
+    for (var c = 0; c < CELLS; c++) start[c] = 0;
+    start[S[0]] = 4;
+    start[S[1]] = 4;
+    return { start: start, steps: steps };
+  }
+
+  // ------------------------------------------------------------------
   // Policy
   // ------------------------------------------------------------------
 
@@ -707,6 +769,11 @@
     this.certMemo = {};
     this.deadEnds = {};
     this.planFail = {};
+    // The perfect book: loaded on the first perfect plan; false means
+    // the data file isn't shipped and search has to do the work.
+    this.book = null;
+    this.bookPos = 0;
+    this.bookKey = "";
   }
 
   // board: flat 16-array (y*4+x). Returns a plan:
@@ -782,6 +849,47 @@
     return true;
   }
 
+  // Serve the next stretch of the perfect line. The cursor normally
+  // advances chunk by chunk; a board that doesn't match it (an attach
+  // mid-game, a driver hiccup) resyncs by replaying the line, and a
+  // board that isn't on the line at all falls back to the search
+  // planner. Chunked so progress reporting stays alive.
+  SuperAI.prototype.bookPlan = function (board) {
+    if (this.book === false) return null;
+    if (this.book === null) {
+      this.book = perfectBook(this.corner) || false;
+      if (!this.book) return null;
+      this.bookPos = 0;
+      this.bookKey = this.book.start.join(",");
+    }
+    var key = board.join(",");
+    if (key !== this.bookKey) {
+      var rb = this.book.start.slice();
+      var pos = rb.join(",") === key ? 0 : -1;
+      for (var s = 0; s < this.book.steps.length && pos < 0; s++) {
+        var st = this.book.steps[s];
+        rb = simMove(rb, st.dir).board;
+        rb[st.cell] = st.value;
+        if (rb.join(",") === key) pos = s + 1;
+      }
+      if (pos < 0) return null;
+      this.bookPos = pos;
+      this.bookKey = key;
+    }
+    if (this.bookPos >= this.book.steps.length) return null;
+    var end = Math.min(this.bookPos + 2000, this.book.steps.length);
+    var steps = this.book.steps.slice(this.bookPos, end);
+    var nb = board.slice();
+    for (var k = 0; k < steps.length; k++) {
+      nb = simMove(nb, steps[k].dir).board;
+      nb[steps[k].cell] = steps[k].value;
+    }
+    this.bookPos = end;
+    this.bookKey = nb.join(",");
+    return { type: "line", steps: steps,
+             phase: end === this.book.steps.length ? "finale" : "build" };
+  };
+
   SuperAI.prototype.plan = function (board) {
     var S = this.S;
     if (this.goal === "tile") {
@@ -794,6 +902,14 @@
           ? { type: "done" }
           : { type: "stuck", reason: "board died early" };
       }
+    }
+
+    // Perfect: play the book. The computed line covers the whole game
+    // (build and fold); search below is only the fallback for boards
+    // that aren't on it.
+    if (this.perfect) {
+      var bp = this.bookPlan(board);
+      if (bp) return bp;
     }
 
     // Finale: the fold only ever starts from ONE board — the primed
@@ -1181,8 +1297,15 @@
   HeadlessRunner.prototype.freshBoard = function () {
     var b = [];
     for (var i = 0; i < CELLS; i++) b.push(0);
-    this.spawnRandom(b);
-    this.spawnRandom(b);
+    if (this.ai.perfect) {
+      // Canonical start: the book line is defined from exactly this
+      // board — the two 4s seated at the head of the snake.
+      b[this.S[0]] = 4;
+      b[this.S[1]] = 4;
+    } else {
+      this.spawnRandom(b);
+      this.spawnRandom(b);
+    }
     return b;
   };
 
@@ -1301,7 +1424,8 @@
     analyze: analyze,
     chainComplete: chainComplete,
     maxTile: maxTile,
-    debugChildren: debugChildren
+    debugChildren: debugChildren,
+    perfectBook: perfectBook
   };
 
   if (typeof module !== "undefined" && module.exports) {
