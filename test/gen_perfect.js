@@ -91,7 +91,7 @@ function H(b) {
   return acc;
 }
 
-function candidates(b, seen) {
+function candidates(b, seen, shallow) {
   var z = -1;
   for (var zi = 0; zi < 16; zi++) if (b[S[zi]] === 0) { z = zi; break; }
   var tailRow = z < 0 ? 3 : (z / 4) | 0;
@@ -128,6 +128,16 @@ function candidates(b, seen) {
           if (Super.simMove(nb, mdirs[mdi]).moved) mobile = true;
         }
         if (!mobile) continue;
+        // Near-full boards get a second ply: a state can be mobile yet
+        // have every onward move die at once. The classic trap is the
+        // very last plant — seating the second-to-last 4 shallow
+        // ([16,8,4,_] row) reads as a longer walk but forces game over
+        // one move short of the spiral; only [16,8,_,4] can finish.
+        if (!shallow) {
+          var empties = 0;
+          for (var ei = 0; ei < 16; ei++) if (!nb[ei]) empties++;
+          if (empties <= 2 && candidates(nb, {}, true).length === 0) continue;
+        }
       }
       out.push({ dir: dir, cell: plants[pi], nb: nb, key: key, h: H(nb) });
     }
