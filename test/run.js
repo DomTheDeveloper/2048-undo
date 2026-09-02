@@ -114,14 +114,58 @@ function runCorner(corner) {
       predictable: process.env.PREDICTABLE === "1",
       goal: goal });
   driver.attach();
-  gm.restart(); // fresh board through the patched spawner
+
+  // Long runs outlive this container, so CHECKPOINT=<file> persists the
+  // whole game every beat and resumes it on relaunch. GameManager's undo
+  // entries are plain data ({score, tiles: [{x, y, value,
+  // previousPosition}]}), so the undo stack survives a JSON round-trip
+  // and the deep backtrack ladder keeps working across a resume.
+  var CKPT = process.env.CHECKPOINT || null;
+  var elapsedOffset = 0;
+  var finaleSpawnedFour = false;
+  var resumed = false;
+  if (CKPT && fs.existsSync(CKPT)) {
+    try {
+      var ck = JSON.parse(fs.readFileSync(CKPT, "utf8"));
+      if (ck.corner === corner && ck.goal === goal) {
+        gm.grid.build();
+        for (var ci = 0; ci < 16; ci++) {
+          if (ck.board[ci]) {
+            gm.grid.cells[ci % 4][(ci / 4) | 0] =
+              new game.Tile({ x: ci % 4, y: (ci / 4) | 0 }, ck.board[ci]);
+          }
+        }
+        gm.score = ck.score;
+        gm.undoStack = ck.undoStack || [];
+        gm.over = false;
+        gm.won = false;
+        gm.keepPlaying = true;
+        driver.stats = ck.stats;
+        elapsedOffset = ck.elapsed || 0;
+        finaleSpawnedFour = !!ck.primed4;
+        resumed = true;
+        console.log("[" + corner + "] resumed: moves=" + ck.stats.moves +
+          " undos=" + ck.stats.undos + " score=" + ck.score +
+          " undoDepth=" + gm.undoStack.length +
+          " prior=" + (elapsedOffset / 1000).toFixed(1) + "s" +
+          " board=[" + ck.board.join(",") + "]");
+      } else {
+        console.error("[" + corner + "] checkpoint is for " + ck.corner +
+          "/" + ck.goal + ", ignoring");
+      }
+    } catch (e) {
+      console.error("[" + corner + "] checkpoint load failed: " + e.message);
+    }
+  }
+  if (!resumed) gm.restart(); // fresh board through the patched spawner
 
   var MAX_ATTEMPTS = Number(process.env.MAX_ATTEMPTS) || 30e6;
   var MAX_MS = (Number(process.env.MAX_MIN) || 70) * 60 * 1000;
-  var finaleSpawnedFour = false;
   var lastPhase = "build";
-  var lastLog = 0;
+  var lastLog = resumed ? driver.stats.moves : 0;
   var lastBeat = Date.now();
+
+  function elapsed() { return elapsedOffset + (Date.now() - t0); }
 
   while (true) {
     var ev = driver.step();
@@ -170,7 +214,7 @@ function runCorner(corner) {
         console.log("[" + corner + "] moves=" + m +
           " undos=" + driver.stats.undos +
           " max=" + Super.maxTile(driver.readBoard()) +
-          " " + ((Date.now() - t0) / 1000).toFixed(1) + "s");
+          " " + (elapsed() / 1000).toFixed(1) + "s");
       }
     }
     if (Date.now() - lastBeat > 15000) {
@@ -182,13 +226,28 @@ function runCorner(corner) {
         " max=" + Super.maxTile(driver.readBoard()) +
         " restarts=" + driver.stats.restarts +
         " board=[" + driver.readBoard().join(",") + "]");
+      if (CKPT) {
+        try {
+          fs.writeFileSync(CKPT + ".tmp", JSON.stringify({
+            corner: corner, goal: goal,
+            board: driver.readBoard(), score: gm.score,
+            undoStack: gm.undoStack,
+            stats: driver.stats,
+            elapsed: elapsed(),
+            primed4: finaleSpawnedFour
+          }));
+          fs.renameSync(CKPT + ".tmp", CKPT);
+        } catch (e) {
+          console.error("[" + corner + "] checkpoint write failed: " + e.message);
+        }
+      }
     }
     if (driver.stats.attempts > MAX_ATTEMPTS) {
       console.error("[" + corner + "] attempt budget exceeded");
       console.error(fmt(driver.readBoard()));
       return false;
     }
-    if (Date.now() - t0 > MAX_MS) {
+    if (elapsed() > MAX_MS) {
       console.error("[" + corner + "] time budget exceeded");
       console.error(fmt(driver.readBoard()));
       return false;
@@ -209,7 +268,8 @@ function runCorner(corner) {
   } else {
     ok = b[S[0]] === 131072;
   }
-  console.log("[" + corner + "] DONE in " + ((Date.now() - t0) / 1000).toFixed(1) + "s" +
+  if (CKPT && ok) { try { fs.unlinkSync(CKPT); } catch (e) {} }
+  console.log("[" + corner + "] DONE in " + (elapsed() / 1000).toFixed(1) + "s" +
     "  moves=" + driver.stats.moves +
     "  undos=" + driver.stats.undos +
     "  attempts=" + driver.stats.attempts +
