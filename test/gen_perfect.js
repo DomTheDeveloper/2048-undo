@@ -171,7 +171,30 @@ function generateBuild() {
   var t0 = Date.now();
   var lastReport = 0;
 
+  // The walk state is just (board, steps), so a long generation run can
+  // survive its host dying: GEN_CKPT=<file> persists both every few
+  // seconds and a relaunch picks up mid-line. The mass ledger guards
+  // the resume: 8 + 4*steps must equal the board's mass exactly.
+  var CKPT = process.env.GEN_CKPT || null;
+  var lastCkpt = 0;
+  if (CKPT && fs.existsSync(CKPT)) {
+    var ck = JSON.parse(fs.readFileSync(CKPT, "utf8"));
+    var cm = 0;
+    for (var ci = 0; ci < 16; ci++) cm += ck.board[ci];
+    if (cm !== 8 + 4 * ck.steps.length) {
+      throw new Error("checkpoint fails the mass ledger");
+    }
+    b = ck.board;
+    steps = ck.steps;
+    console.log("  resumed at move " + steps.length);
+  }
+
   while (!spiralReached(b)) {
+    if (CKPT && Date.now() - lastCkpt >= 15000) {
+      lastCkpt = Date.now();
+      fs.writeFileSync(CKPT + ".tmp", JSON.stringify({ board: b, steps: steps }));
+      fs.renameSync(CKPT + ".tmp", CKPT);
+    }
     if (steps.length > 32766) {
       throw new Error("overran the ledger at " + steps.length + " moves");
     }
@@ -201,6 +224,7 @@ function generateBuild() {
   if (steps.length !== 32766) {
     throw new Error("spiral in " + steps.length + " moves; ledger says 32766");
   }
+  if (CKPT) { try { fs.unlinkSync(CKPT); } catch (e) {} }
   return { steps: steps, board: b };
 }
 
