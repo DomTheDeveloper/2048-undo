@@ -26,6 +26,7 @@
     rafId: null,
     pumpId: null,
     worker: null,
+    replayId: null,
     plannerBusySince: 0,
     requestedKey: null,
     savedProtoMove: null,
@@ -177,6 +178,11 @@
       controller.headless = { stats: msg.stats, board: msg.board,
                               elapsed: msg.elapsed };
       if (msg.type === "headlessDone") {
+        if (controller.worker) { controller.worker.terminate(); controller.worker = null; }
+        if (controller.mode === "perfect" && controller.goal !== "score" &&
+            perfectFinaleReplay(msg.board, msg.stats.score)) {
+          return; // the cinema ends with the overlay and stopRun
+        }
         installBoard(msg.board, msg.stats.score);
         controller.done = true;
         showWinOverlay();
@@ -209,6 +215,97 @@
     controller.pumpId = setInterval(function () {
       if (controller.running) updateHud(false);
     }, 500);
+  }
+
+  // The compute is instant, but the ending deserves eyes on it. Once
+  // the worker finishes a perfect run, rewind to just before the
+  // finale, watch the tail of the build complete the primed spiral —
+  // 65536 down to 4, snaked around the board — hold on it, then fold
+  // it into 131072 in slow motion, every move played through the real
+  // game. Returns false if the book isn't available to the page (then
+  // the final board is simply installed, as before).
+  var REPLAY_TAIL = 40;      // last build moves + the 15-move fold
+  var SPIRAL_HOLD_MS = 2200; // the pose on the completed spiral
+
+  function perfectFinaleReplay(finalBoard, finalScore) {
+    var book = null;
+    try { book = Super.perfectBook(controller.corner); } catch (e) {}
+    if (!book || book.steps.length < REPLAY_TAIL) return false;
+    var g = gm();
+
+    // Fast-forward the line (pure simulation) to the cinema point,
+    // carrying the score so the counter stays honest.
+    var from = book.steps.length - REPLAY_TAIL;
+    var b = book.start.slice();
+    var score = 0;
+    for (var i = 0; i < from; i++) {
+      var st = book.steps[i];
+      var sim = Super.simMove(b, st.dir);
+      for (var m = 0; m < sim.merges.length; m++) score += sim.merges[m];
+      sim.board[st.cell] = st.value;
+      b = sim.board;
+    }
+
+    var S = Super.snakeCells(controller.corner);
+    function primed(bb) {
+      if (bb[S[15]] !== 4) return false;
+      for (var p = 0; p <= 14; p++) {
+        if (bb[S[p]] !== (1 << (16 - p))) return false;
+      }
+      return true;
+    }
+
+    installBoard(b, score);
+    document.body.classList.remove("super-computing");
+    controller.finale = true;
+    updateHud(false);
+
+    var idx = from;
+    var stepMs = 1000 / FINALE_MPS;
+    function playNext() {
+      if (!controller.running) return;
+      if (idx >= book.steps.length) {
+        controller.replayId = null;
+        if (Super.maxTile(b) < 131072) {
+          // The real grid should mirror the book exactly; if anything
+          // ever drifted, land on the verified final position.
+          installBoard(finalBoard, finalScore);
+        }
+        g.undoStack.length = 0; // the history lived in the book
+        controller.done = true;
+        render();
+        showWinOverlay();
+        stopRun("won");
+        return;
+      }
+      var st = book.steps[idx++];
+      var sim = Super.simMove(b, st.dir);
+      sim.board[st.cell] = st.value;
+      b = sim.board;
+
+      var origSpawn = g.addRandomTile;
+      g.addRandomTile = function () {
+        var t = new Tile({ x: st.cell % 4, y: (st.cell / 4) | 0 }, st.value);
+        g.grid.insertTile(t);
+      };
+      controller.aiActing = true;
+      try {
+        g.move(st.dir);
+      } finally {
+        g.addRandomTile = origSpawn;
+        controller.aiActing = false;
+      }
+      render();
+      updateHud(false);
+      var wait = stepMs;
+      if (primed(b)) {
+        wait = SPIRAL_HOLD_MS;
+        setStatus("move 32,766 — THE PERFECT SPIRAL: 65536 … 4, one fold from 131072");
+      }
+      controller.replayId = setTimeout(playNext, wait);
+    }
+    controller.replayId = setTimeout(playNext, 700);
+    return true;
   }
 
   function startRun() {
@@ -298,7 +395,8 @@
     controller.running = false;
     if (controller.rafId) cancelAnimationFrame(controller.rafId);
     if (controller.pumpId) clearInterval(controller.pumpId);
-    controller.rafId = controller.pumpId = null;
+    if (controller.replayId) clearTimeout(controller.replayId);
+    controller.rafId = controller.pumpId = controller.replayId = null;
     if (controller.worker) { controller.worker.terminate(); controller.worker = null; }
     if (controller.driver) controller.driver.detach();
     if (controller.headless && controller.headless.board && why !== "won") {
