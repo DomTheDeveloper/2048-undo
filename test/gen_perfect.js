@@ -45,7 +45,18 @@ var VERBOSE = process.env.V === "1";
 //                 at once. The ledger is target-agnostic: mass 8 to
 //                 mass 262,140 at +4 a move is 65,533 moves whatever
 //                 the route, so only reachability needs constructing.
-var TARGET = process.env.TARGET === "tile" ? "tile" : "full";
+//   TARGET=score — the maximum-score game: the same complete spiral,
+//                 fed with 2s. Two 4-spawns are structurally forced
+//                 (the last two of the game — the tail's staging
+//                 squeeze leaves no room to build them), so the line
+//                 is exactly (262140 - 4 - 8)/2 + 2 = 131,066 moves
+//                 from two starting 2s, scoring exactly 3,932,156.
+var TARGET = process.env.TARGET === "tile" ? "tile"
+           : process.env.TARGET === "score" ? "score" : "full";
+var PLANT = TARGET === "score" ? 2 : 4;
+var START_MASS = TARGET === "score" ? 4 : 8;
+// 4-plants unlock only at the death squeeze (the last three spawns).
+var LATE_MASS = 262140 - 12;
 
 function chainDone(b) {
   for (var i = 0; i < 16; i++) {
@@ -54,9 +65,10 @@ function chainDone(b) {
   return true;
 }
 function targetDone(b) {
-  return TARGET === "full" ? chainDone(b) : spiralReached(b);
+  return TARGET === "tile" ? spiralReached(b) : chainDone(b);
 }
-var TARGET_MOVES = TARGET === "full" ? 65533 : 32766;
+var TARGET_MOVES = TARGET === "full" ? 65533
+                 : TARGET === "score" ? 131066 : 32766;
 
 function xy(i) { return { x: i % 4, y: (i / 4) | 0 }; }
 function dirFromTo(a, b) {
@@ -136,9 +148,20 @@ function candidates(b, seen, shallow) {
         plants.push(hc); seenP[hc] = 1;
       }
     }
+    // 2-feeding gets the 4-spawn menu only inside the death squeeze:
+    // the final 8 and the tail 4 cannot be staged from 2s in the space
+    // left, and keeping 4s out everywhere else is what makes the
+    // score exact.
+    var pvals = [PLANT];
+    if (PLANT === 2) {
+      var bm = 0;
+      for (var bmi = 0; bmi < 16; bmi++) bm += sim.board[bmi];
+      if (bm >= LATE_MASS) pvals = [2, 4];
+    }
     for (var pi = 0; pi < plants.length; pi++) {
+     for (var pvi = 0; pvi < pvals.length; pvi++) {
       var nb = sim.board.slice();
-      nb[plants[pi]] = 4;
+      nb[plants[pi]] = pvals[pvi];
       var key = nb.join(",");
       if (seen[key]) continue;
       // Once the 131072 exists, nothing may ever sit head-ward of it:
@@ -180,7 +203,9 @@ function candidates(b, seen, shallow) {
           if (empties <= 2 && candidates(nb, {}, true).length === 0) continue;
         }
       }
-      out.push({ dir: dir, cell: plants[pi], nb: nb, key: key, h: H(nb) });
+      out.push({ dir: dir, cell: plants[pi], value: pvals[pvi],
+                 nb: nb, key: key, h: H(nb) });
+     }
     }
   }
   out.sort(function (p, q) { return q.h - p.h; });
@@ -215,8 +240,8 @@ function rescue(b, maxDepth, floor) {
 function generateBuild() {
   var b = [];
   for (var i = 0; i < 16; i++) b.push(0);
-  b[S[0]] = 4;
-  b[S[1]] = 4;
+  b[S[0]] = PLANT;
+  b[S[1]] = PLANT;
 
   var steps = [];
   var t0 = Date.now();
@@ -232,9 +257,11 @@ function generateBuild() {
     var ck = JSON.parse(fs.readFileSync(CKPT, "utf8"));
     var cm = 0;
     for (var ci = 0; ci < 16; ci++) cm += ck.board[ci];
+    var spawned = 0;
+    for (var si2 = 0; si2 < ck.steps.length; si2++) spawned += ck.steps[si2].value;
     if (ck.target && ck.target !== TARGET) {
       console.log("  checkpoint is for TARGET=" + ck.target + ", starting fresh");
-    } else if (cm !== 8 + 4 * ck.steps.length) {
+    } else if (cm !== START_MASS + spawned) {
       throw new Error("checkpoint fails the mass ledger");
     } else {
       b = ck.board;
@@ -268,7 +295,7 @@ function generateBuild() {
       }
     }
     for (var k = 0; k < pick.length; k++) {
-      steps.push({ dir: pick[k].dir, cell: pick[k].cell, value: 4 });
+      steps.push({ dir: pick[k].dir, cell: pick[k].cell, value: pick[k].value });
       b = pick[k].nb;
       if (!milestone && Super.maxTile(b) >= 131072) {
         milestone = steps.length;
@@ -318,9 +345,11 @@ function verifyCorner(corner, which) {
     sim.board[st.cell] = st.value;
     b = sim.board;
   }
-  if (which === "full") {
-    if (book.steps.length !== 65533) {
-      throw new Error(corner + ": " + book.steps.length + " steps, want 65533");
+  if (which === "full" || which === "score") {
+    var wantSteps = which === "full" ? 65533 : 131066;
+    var wantScore = which === "full" ? 3670024 : 3932156;
+    if (book.steps.length !== wantSteps) {
+      throw new Error(corner + ": " + book.steps.length + " steps, want " + wantSteps);
     }
     if (!Super.fullChain(b, Sc)) {
       throw new Error(corner + ": final board is not the full spiral");
@@ -330,13 +359,24 @@ function verifyCorner(corner, which) {
         throw new Error(corner + ": full-spiral board is not dead");
       }
     }
-    // Path-independent given all-4 spawns: every tile 2^k built from
-    // 4s banks (k-2)*2^k, and the full chain sums to exactly 3,670,024.
-    if (score !== 3670024) {
-      throw new Error(corner + ": score " + score + ", want 3,670,024");
+    // Path-independent: every tile 2^k built from 4s banks (k-2)*2^k
+    // (full chain: 3,670,024); built from 2s it banks (k-1)*2^k, minus
+    // 4 per forced 4-spawn (full chain: 3,932,164 - 8 = 3,932,156).
+    if (score !== wantScore) {
+      throw new Error(corner + ": score " + score + ", want " + wantScore);
     }
-    console.log("  " + corner + ": 65,533 steps replay clean — full spiral, " +
-      "dead board, score 3,670,024");
+    if (which === "score") {
+      var fours = [];
+      for (var f = 0; f < book.steps.length; f++) {
+        if (book.steps[f].value === 4) fours.push(f + 1);
+      }
+      if (fours.length !== 2) {
+        throw new Error(corner + ": " + fours.length +
+          " four-spawns (at " + fours.join(",") + "), want exactly 2");
+      }
+    }
+    console.log("  " + corner + ": " + wantSteps + " steps replay clean — " +
+      "full spiral, dead board, score " + wantScore);
   } else {
     if (book.steps.length !== 32781) {
       throw new Error(corner + ": " + book.steps.length + " steps, want 32781");
@@ -348,7 +388,7 @@ function verifyCorner(corner, which) {
   }
 }
 
-console.log("building the " + (TARGET === "full" ? "65,533" : "32,766") +
+console.log("building the " + TARGET_MOVES.toLocaleString("en-US") +
   "-move counter line (TARGET=" + TARGET + ", " + CORNER + ")...");
 var build = generateBuild();
 console.log("  target reached, ledger exact" +
@@ -377,6 +417,7 @@ try { existing = require(path.join(__dirname, "..", "js", "perfect_line.js")); }
 catch (e) {}
 var hexTile = TARGET === "tile" ? encode(line) : existing.hex;
 var hexFull = TARGET === "full" ? encode(line) : existing.full;
+var hexScore = TARGET === "score" ? encode(line) : existing.score;
 
 var out = "// Generated by test/gen_perfect.js — do not edit.\n" +
   "//\n" +
@@ -390,10 +431,14 @@ var out = "// Generated by test/gen_perfect.js — do not edit.\n" +
   "//          plus the proven-minimal 15-move fold = 32,781.\n" +
   "//   full — to the COMPLETE spiral, 131072 down to 4 filling the\n" +
   "//          board: (262140-8)/4 = 65,533 moves, score 3,670,024.\n" +
+  "//   score — the same spiral fed with 2s (two forced 4-spawns at\n" +
+  "//          the death squeeze): 131,066 moves, score 3,932,156 —\n" +
+  "//          the maximum 2048 allows.\n" +
   "(function (root) {\n" +
   "  var api = {\n" +
   (hexTile ? "    hex:\n\"" + hexTile + "\",\n" : "") +
-  (hexFull ? "    full:\n\"" + hexFull + "\"\n" : "") +
+  (hexFull ? "    full:\n\"" + hexFull + "\",\n" : "") +
+  (hexScore ? "    score:\n\"" + hexScore + "\"\n" : "") +
   "  };\n" +
   "  if (typeof module !== \"undefined\" && module.exports) {\n" +
   "    module.exports = api;\n" +
@@ -411,5 +456,6 @@ delete require.cache[require.resolve(target)];
 ["br", "bl", "tr", "tl"].forEach(function (c) {
   if (hexTile) verifyCorner(c, "tile");
   if (hexFull) verifyCorner(c, "full");
+  if (hexScore) verifyCorner(c, "score");
 });
 console.log("PERFECT LINE VERIFIED");

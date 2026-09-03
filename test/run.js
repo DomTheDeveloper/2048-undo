@@ -65,8 +65,10 @@ function fmt(b) {
 // mass ledger.
 function runPerfect(corner) {
   var t0 = Date.now();
-  var goal = process.env.GOAL === "spiral" ? "spiral" : "tile";
-  var wantMoves = goal === "spiral" ? 65533 : 32781;
+  var goal = process.env.GOAL === "spiral" ? "spiral"
+           : process.env.GOAL === "score" ? "score" : "tile";
+  var wantMoves = goal === "spiral" ? 65533
+                : goal === "score" ? 131066 : 32781;
   var runner = new Super.HeadlessRunner(corner,
     { goal: goal, perfect: true, predictable: true });
   var MAX_MS = (Number(process.env.MAX_MIN) || 70) * 60 * 1000;
@@ -95,13 +97,18 @@ function runPerfect(corner) {
          runner.stats.moves === 65533 &&
          runner.stats.undos === 0 &&
          runner.stats.score === 3670024;
+  } else if (goal === "score") {
+    ok = Super.fullChain(b, S) &&
+         runner.stats.moves === 131066 &&
+         runner.stats.undos === 0 &&
+         runner.stats.score === 3932156;
   } else {
     ok = b[S[0]] === 131072 &&
          runner.stats.moves === 32781 &&
          runner.stats.undos === 0;
   }
   console.log("[" + corner + "] PERFECT " +
-    (goal === "spiral" ? "SPIRAL " : "") + "DONE in " +
+    (goal === "spiral" ? "SPIRAL " : goal === "score" ? "SCORE " : "") + "DONE in " +
     ((Date.now() - t0) / 1000).toFixed(1) + "s" +
     "  line=" + runner.stats.moves + " (minimum " + wantMoves + ")" +
     "  undos=" + runner.stats.undos +
@@ -113,6 +120,8 @@ function runPerfect(corner) {
   if (!ok) {
     console.error("[" + corner + "] FAIL: " + (goal === "spiral"
       ? "want the full chain, line === 65533, undos === 0, score === 3,670,024"
+      : goal === "score"
+      ? "want the full chain, line === 131066, undos === 0, score === 3,932,156"
       : "want 131072 in " + corner + ", line === 32781, undos === 0"));
   }
   return ok;

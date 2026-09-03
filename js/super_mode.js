@@ -180,7 +180,7 @@
                               elapsed: msg.elapsed };
       if (msg.type === "headlessDone") {
         if (controller.worker) { controller.worker.terminate(); controller.worker = null; }
-        if (controller.mode === "perfect" && controller.goal !== "score" &&
+        if (controller.mode === "perfect" &&
             perfectFinaleReplay(msg.board, msg.stats.score)) {
           return; // the cinema ends with the overlay and stopRun
         }
@@ -232,7 +232,8 @@
     var book = null;
     try {
       book = Super.perfectBook(controller.corner,
-        controller.goal === "spiral" ? "full" : "tile");
+        controller.goal === "spiral" ? "full"
+      : controller.goal === "score" ? "score" : "tile");
     } catch (e) {}
     if (!book || book.steps.length < REPLAY_TAIL) return false;
     var g = gm();
@@ -276,12 +277,13 @@
           installBoard(finalBoard, finalScore);
         }
         g.undoStack.length = 0; // the history lived in the book
-        if (controller.goal === "spiral" && !endHeld) {
+        if (controller.goal !== "tile" && !endHeld) {
           // The last frame IS the money shot: the complete chain,
           // 131072 down to 4. Hold the pose before the overlay.
           endHeld = true;
-          controller.holdStatus =
-            "move 65,533 — THE 131072 SPIRAL: every power of two at once";
+          controller.holdStatus = controller.goal === "score"
+            ? "move 131,066 — MAXIMUM SCORE: 3,932,156 points, the board dead on the full spiral"
+            : "move 65,533 — THE 131072 SPIRAL: every power of two at once";
           setStatus(controller.holdStatus);
           render();
           controller.replayId = setTimeout(playNext, SPIRAL_HOLD_MS);
@@ -570,11 +572,13 @@
           : "FINALE — folding the spiral into 131072…"));
     } else if (controller.running && !d && hs) {
       var hmax = hs.board ? Super.maxTile(hs.board) : 0;
-      if (controller.mode === "perfect" && controller.goal !== "score") {
+      if (controller.mode === "perfect") {
         setStatus("computing the perfect " +
-          (controller.goal === "spiral" ? "spiral — move " : "game — move ") +
+          (controller.goal === "spiral" ? "spiral — move "
+         : controller.goal === "score" ? "score run — move " : "game — move ") +
           fmtInt(st.moves) +
-          (controller.goal === "spiral" ? " of 65,533" : " of 32,781") +
+          (controller.goal === "spiral" ? " of 65,533"
+         : controller.goal === "score" ? " of 131,066" : " of 32,781") +
           " — zero undos, by construction — " +
           fmtInt(st.explored || 0) + " states searched — largest tile " +
           fmtInt(hmax));
@@ -637,7 +641,8 @@
       setStatus(controller.goal === "score"
         ? "maximum-score run to 3,932,156 — " +
           (controller.mode === "perfect"
-            ? "all-2 feeding is what perfect means here" : how)
+            ? "the computed 131,066-move line: all 2s but the two forced 4s"
+            : how)
         : controller.goal === "spiral"
         ? "the FULL spiral — every power of two, 131072 down to 4, at once — " + how
         : (controller.mode === "perfect"
@@ -656,7 +661,8 @@
     var el = $(".super-win");
     var how = controller.mode === "perfect"
       ? "computed as pure data: exactly " +
-        (controller.goal === "spiral" ? "65,533" : "32,781") +
+        (controller.goal === "spiral" ? "65,533"
+       : controller.goal === "score" ? "131,066" : "32,781") +
         " moves, zero undos"
       : controller.mode === "predictable"
       ? "every tile chosen and placed by design"

@@ -695,8 +695,11 @@
     if (!data && global && global.PERFECT_LINE) data = global.PERFECT_LINE;
     if (!data) return null;
     // "tile" = the 32,781-move line to the 131072 tile; "full" = the
-    // 65,533-move line that keeps building to the complete spiral.
-    var hex = which === "full" ? data.full : data.hex;
+    // 65,533-move line to the complete spiral; "score" = the same
+    // spiral fed with 2s — 131,066 moves, the 3,932,156-point maximum.
+    var hex = which === "full" ? data.full
+            : which === "score" ? data.score
+            : data.hex;
     if (!hex) return null;
     var steps = new Array(hex.length >> 1);
     for (var i = 0; i < steps.length; i++) {
@@ -729,8 +732,11 @@
     var S = snakeCells(corner);
     var start = new Array(CELLS);
     for (var c = 0; c < CELLS; c++) start[c] = 0;
-    start[S[0]] = 4;
-    start[S[1]] = 4;
+    // The score line starts from two 2s (a starting 4 would cost 4
+    // points); the move-minimal lines start from two 4s.
+    var sv = which === "score" ? 2 : 4;
+    start[S[0]] = sv;
+    start[S[1]] = sv;
     return { start: start, steps: steps };
   }
 
@@ -772,14 +778,13 @@
     this.corner = corner;
     var g = opts && opts.goal;
     this.goal = g === "score" ? "score" : g === "spiral" ? "spiral" : "tile";
-    // Perfect: the move-minimal game. Mass is conserved by slides and
-    // grows only by spawns, so with every build spawn a 4 the build to
-    // the primed 131072-chain takes EXACTLY (131072-8)/4 = 32,766
-    // moves, and the collapse cascade 8,16,...,131072 adds exactly 15:
-    // 32,781 moves total, the provable minimum for this construction
-    // (the same ledger gives the known 519 for the 2048 tile). A score
-    // run ignores the flag: max score wants the opposite dial - all 2s.
-    this.perfect = !!(opts && opts.perfect) && this.goal !== "score";
+    // Perfect: the game as a computed constant, one shipped line per
+    // goal. Mass is conserved by slides and grows only by spawns, so
+    // each line's length is exact by construction: 32,781 to the tile
+    // and 65,533 to the full spiral (all-4 feeding), 131,066 for the
+    // maximum score (all-2 feeding, two forced 4-spawns, 3,932,156
+    // points). The same ledger gives the known 519 for the 2048 tile.
+    this.perfect = !!(opts && opts.perfect);
     this.S = snakeCells(corner);
     // The second act is a fresh sprint on the 15 cells the 131072
     // doesn't occupy: same machine, one cell shorter.
@@ -806,8 +811,11 @@
     var o = {};
     for (var k in base) o[k] = base[k];
     o.deadEnds = this.deadEnds;
-    o.exactDead = this.perfect;
-    o.pair44 = this.perfect;
+    // The strict-4 refinements only apply to the move-minimal goals; a
+    // score run's fallback search keeps the proven 2-feed machinery
+    // (family dead-end keys, no pair44) even under the perfect flag.
+    o.exactDead = this.perfect && this.goal !== "score";
+    o.pair44 = this.perfect && this.goal !== "score";
     // A spiral run IS a score run to the search: same second act, same
     // healing regime, same death board — only the spawn dial and the
     // done condition differ, and those live up here.
@@ -858,7 +866,7 @@
   // can never converge on, as a budget-long two-board oscillation
   // proved. The healing rest rules were validated under family marks.)
   SuperAI.prototype.exactDeadFor = function (board) {
-    return this.perfect;
+    return this.perfect && this.goal !== "score";
   };
 
   SuperAI.prototype.markDeadEnd = function (board) {
@@ -881,7 +889,8 @@
     if (this.book === false) return null;
     if (this.book === null) {
       this.book = perfectBook(this.corner,
-                              this.goal === "spiral" ? "full" : "tile") || false;
+                              this.goal === "spiral" ? "full"
+                            : this.goal === "score" ? "score" : "tile") || false;
       if (!this.book) return null;
       this.bookPos = 0;
       this.bookKey = this.book.start.join(",");
@@ -1087,10 +1096,13 @@
       }
       var cells = this.grid.availableCells();
       if (!cells.length) return;
-      // A perfect game is all 4s from the very first two tiles: a
-      // stray 2 could never merge again (no partner will ever spawn)
-      // and would poison the board for good.
-      var value = self.ai.perfect ? 4 : (Math.random() < 0.9 ? 2 : 4);
+      // A move-minimal perfect game is all 4s from the very first two
+      // tiles: a stray 2 could never merge again (no partner will ever
+      // spawn) and would poison the board for good. A perfect score
+      // game is the opposite dial — all 2s.
+      var value = self.ai.perfect
+        ? (self.ai.goal === "score" ? 2 : 4)
+        : (Math.random() < 0.9 ? 2 : 4);
       var cell = cells[(Math.random() * cells.length) | 0];
       this.grid.insertTile(new Tile(cell, value));
       self.lastSpawn = { x: cell.x, y: cell.y, value: value };
@@ -1333,9 +1345,11 @@
     for (var i = 0; i < CELLS; i++) b.push(0);
     if (this.ai.perfect) {
       // Canonical start: the book line is defined from exactly this
-      // board — the two 4s seated at the head of the snake.
-      b[this.S[0]] = 4;
-      b[this.S[1]] = 4;
+      // board — two tiles seated at the head of the snake (2s for the
+      // score line, 4s for the move-minimal ones).
+      var sv = this.goal === "score" ? 2 : 4;
+      b[this.S[0]] = sv;
+      b[this.S[1]] = sv;
     } else {
       this.spawnRandom(b);
       this.spawnRandom(b);
@@ -1347,7 +1361,8 @@
     var empt = emptyCells(b);
     if (!empt.length) return;
     b[empt[(Math.random() * empt.length) | 0]] =
-      this.ai.perfect ? 4 : (Math.random() < 0.9 ? 2 : 4);
+      this.ai.perfect ? (this.goal === "score" ? 2 : 4)
+                      : (Math.random() < 0.9 ? 2 : 4);
   };
 
   HeadlessRunner.prototype.goalDone = function (b) {
