@@ -56,10 +56,12 @@ var TARGET = process.env.TARGET === "tile" ? "tile"
            : process.env.TARGET === "score" ? "score" : "full";
 var PLANT = TARGET === "score" ? 2 : 4;
 var START_MASS = TARGET === "score" ? 4 : 8;
-// 4-plants unlock only inside the two squeezes: the fold-entry (board
-// mass approaching 131,072) and the final death (approaching 262,140).
+// 4-plants unlock at exactly the two forced moments — the fold-entry
+// and the final death, both with pre-plant mass 4 short of an act's
+// full board. Any wider window lets stray 4s in, and every stray 4
+// costs one move of length and 4 points off the exact maximum.
 function squeeze(bm) {
-  return (bm >= 131060 && bm <= 131080) || bm >= 262128;
+  return bm === 131068 || bm === 262136;
 }
 
 function chainDone(b) {
@@ -130,7 +132,8 @@ function H(b) {
   return acc;
 }
 
-function candidates(b, seen, shallow) {
+function candidates(b, seen, depth) {
+  if (depth === undefined) depth = 3;
   var z = -1;
   for (var zi = 0; zi < 16; zi++) if (b[S[zi]] === 0) { z = zi; break; }
   var tailRow = z < 0 ? 3 : (z / 4) | 0;
@@ -201,10 +204,10 @@ function candidates(b, seen, shallow) {
         // BOTH era boundaries (the primed spiral before the fold, and
         // the complete chain at the very end), and the fold-era boards
         // that live at 1-2 empties simply pay the one extra ply.
-        if (!shallow) {
+        if (depth > 1) {
           var empties = 0;
           for (var ei = 0; ei < 16; ei++) if (!nb[ei]) empties++;
-          if (empties <= 2 && candidates(nb, {}, true).length === 0) continue;
+          if (empties <= 2 && candidates(nb, {}, depth - 1).length === 0) continue;
         }
       }
       out.push({ dir: dir, cell: plants[pi], value: pvals[pvi],
