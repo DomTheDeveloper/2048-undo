@@ -27,6 +27,7 @@
     pumpId: null,
     worker: null,
     replayId: null,
+    holdStatus: null,
     plannerBusySince: 0,
     requestedKey: null,
     savedProtoMove: null,
@@ -279,7 +280,9 @@
           // The last frame IS the money shot: the complete chain,
           // 131072 down to 4. Hold the pose before the overlay.
           endHeld = true;
-          setStatus("move 65,533 — THE 131072 SPIRAL: every power of two at once");
+          controller.holdStatus =
+            "move 65,533 — THE 131072 SPIRAL: every power of two at once";
+          setStatus(controller.holdStatus);
           render();
           controller.replayId = setTimeout(playNext, SPIRAL_HOLD_MS);
           return;
@@ -291,6 +294,7 @@
         stopRun("won");
         return;
       }
+      controller.holdStatus = null; // any lingering pose is over
       var st = book.steps[idx++];
       var sim = Super.simMove(b, st.dir);
       sim.board[st.cell] = st.value;
@@ -313,7 +317,9 @@
       var wait = stepMs;
       if (primed(b)) {
         wait = SPIRAL_HOLD_MS;
-        setStatus("move 32,766 — THE PERFECT SPIRAL: 65536 … 4, one fold from 131072");
+        controller.holdStatus =
+          "move 32,766 — THE PERFECT SPIRAL: 65536 … 4, one fold from 131072";
+        setStatus(controller.holdStatus);
       }
       controller.replayId = setTimeout(playNext, wait);
     }
@@ -410,6 +416,7 @@
     if (controller.pumpId) clearInterval(controller.pumpId);
     if (controller.replayId) clearTimeout(controller.replayId);
     controller.rafId = controller.pumpId = controller.replayId = null;
+    controller.holdStatus = null;
     if (controller.worker) { controller.worker.terminate(); controller.worker = null; }
     if (controller.driver) controller.driver.detach();
     if (controller.headless && controller.headless.board && why !== "won") {
@@ -555,9 +562,12 @@
         ? "THE 131072 SPIRAL — every power of two on the board at once!"
         : "131072 — perfect spiral complete!");
     } else if (controller.finale) {
-      setStatus(controller.goal === "spiral"
-        ? "FINALE — the last tiles of the full spiral…"
-        : "FINALE — folding the spiral into 131072…");
+      // A held pose (the primed spiral, the finished chain) owns the
+      // status for as long as the camera lingers on it.
+      setStatus(controller.holdStatus ||
+        (controller.goal === "spiral"
+          ? "FINALE — the last tiles of the full spiral…"
+          : "FINALE — folding the spiral into 131072…"));
     } else if (controller.running && !d && hs) {
       var hmax = hs.board ? Super.maxTile(hs.board) : 0;
       if (controller.mode === "perfect" && controller.goal !== "score") {

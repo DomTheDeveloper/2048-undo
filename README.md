@@ -33,22 +33,32 @@ the whole chain folds into **131072**, the highest tile 2048's rules allow.
     game only ever moves forward (**zero undos**), every spawn from the
     very first two tiles is a 4, and the line is **exactly 32,781
     moves** — the provable minimum (derivation below). It isn't even
-    searched at runtime: the perfect game is a *constant of 2048*, so
-    it was generated once (`test/gen_perfect.js`), shipped as 65KB of
-    data (`js/perfect_line.js`), and is replayed — and re-verified,
-    move by move — through the real engine in about a tenth of a
-    second. The other three corners are the same line mirrored.
+    searched at runtime: the perfect games are *constants of 2048*, so
+    they were generated once (`test/gen_perfect.js`) and shipped as
+    data (`js/perfect_line.js`) — the 32,781-move line to the tile and
+    the 65,533-move line to the full spiral — replayed, and re-verified
+    move by move, through the real engine in about a tenth of a second.
+    The other three corners are the same lines mirrored. The ending
+    still gets eyes on it: the finale replays on the real board in slow
+    motion and holds the pose.
 - The finale always plays out in slow motion. It's the money shot.
 
 And a goal picker:
 
 - **🏁 131072 SPRINT** — straight to the tile, 4-feeds, done.
+- **🌀 131072 SPIRAL** — don't stop at the tile: keep building until
+  **every power of two from 131072 down to 4 sits on the board at
+  once** — the complete spiral, the prettiest position the game has,
+  and a board that is dead by construction (adjacent cells always
+  differ). 4-feeds make it the fewest-moves road there: exactly
+  **65,533 moves** in PERFECT mode, ending frozen on the money shot.
 - **💯 MAX SCORE** — score is merge history: a spawned 2 is worth 0 and
   every spawned 4 forfeits 4 points. So this run feeds twos only, and
   after folding the first spiral into 131072 it *keeps playing*,
   stacking the full descending chain 65536, 32768, … beside it until the
   board dies full and mergeless at the theoretical ceiling of
-  **3,932,156 points**.
+  **3,932,156 points**. Same death board as the SPIRAL goal — one
+  final position, reached two perfect ways.
 
 The engine (`js/super_ai.js`) is a checkpoint search over controlled
 outcomes: it plans a line of moves together with the spawn each move
@@ -71,6 +81,7 @@ four runs below executing **simultaneously** (one core each):
 | real engine, predictable | 131072 | 36,561 | 0 | 23.0 min | — | — |
 | real engine, super | 131072 | 36,563 | 1,785,117 | 23.0 min | — | — |
 | **PERFECT (the book)** | 131072 | **32,781** | **0** | **0.1 s** | 0s | 0.1s |
+| **PERFECT SPIRAL (the book)** | full chain, score 3,670,024 | **65,533** | **0** | **0.2 s** | 0s | 0.2s |
 | honest expectimax (no undo, no control) | 1024–2048 | — | — | ~2s/game | — | — |
 
 The story the numbers tell: the board engine is effectively free (1.8M
@@ -119,26 +130,39 @@ whenever convenient, roughly 8,200 of them. PERFECT allows none — and
 because a lone 2 could never merge again in an all-4 world, even the
 two starting tiles must be 4s.
 
+**The full spiral, fewest moves.** The complete chain — 131072,
+65536, … 4, one power per cell — has mass 2^18 − 4 = 262,140, so an
+all-4 game that ends on it takes **exactly (262,140 − 8)/4 = 65,533
+moves**, again independent of route. Its score is path-independent
+too: every tile 2^k built from 4s banks (k−2)·2^k, and the chain sums
+to **exactly 3,670,024 points**. One measured curiosity from the
+generated line: under the all-4 discipline the 131072 first forms at
+move **32,784**, three later than the standalone minimum — a pure-4
+fold needs a few junk consolidations that 2-junk avoids, and the
+ledger silently absorbs them into the total.
+
 **Highest score, fewest moves.** Score is merge history: building 2^k
 entirely from 2s banks (k−1)·2^k points, and every spawned 4 skips a
 2+2 merge, forfeiting exactly 4 points. The maximum-score death board
-is the full descending chain 131072, 65536, … 4 filling all 16 cells,
-worth Σₖ₌₂¹⁷ (k−1)·2^k = 3,932,164 points — minus 8 for the two
-structurally forced 4-spawns (each lands in a last free cell where no
-partner 2 could ever join it): **3,932,156**. The same mass ledger
-prices that game at about **131,066 moves** — four times the sprint,
-because 2-feeds carry half the mass.
+is *that same full chain*, worth Σₖ₌₂¹⁷ (k−1)·2^k = 3,932,164 points —
+minus 8 for the two structurally forced 4-spawns (each lands in a last
+free cell where no partner 2 could ever join it): **3,932,156**. The
+same mass ledger prices that game at about **131,066 moves** — twice
+the spiral run, because 2-feeds carry half the mass.
 
-So the two perfections pull the same lever opposite ways: **spawn 4s
-for the fewest moves, spawn 2s for the most points.** One dial, both
-extremes, and SUPER MODE plays each of them to its bound.
+So the perfections pull the same lever opposite ways on the same final
+board: **spawn 4s for the fewest moves (65,533, scoring 3,670,024),
+spawn 2s for the most points (3,932,156, taking ~131,066 moves).** One
+dial, both extremes, and SUPER MODE plays each of them to its bound.
 
-`PERFECT=1 node test/run.js br bl tr tl` proves the move count in
-about a tenth of a second per corner: it replays the shipped line
-through the real engine — every slide must actually move, every spawn
-cell must be empty — and asserts the surviving line is exactly 32,781
-moves with zero undos. `node test/gen_perfect.js` regenerates and
-re-verifies the line from nothing.
+`PERFECT=1 node test/run.js br bl tr tl` proves the tile line in about
+a tenth of a second per corner: it replays the shipped data through
+the real engine — every slide must actually move, every spawn cell
+must be empty — and asserts exactly 32,781 moves with zero undos.
+`PERFECT=1 GOAL=spiral` does the same for the full spiral: 65,533
+moves, zero undos, the exact chain, score exactly 3,670,024.
+`node test/gen_perfect.js` (`TARGET=full` or `TARGET=tile`)
+regenerates and re-verifies either line from nothing.
 
 References: [The Mathematics of 2048: Minimum Moves to Win with Markov
 Chains](https://jdlm.info/articles/2017/08/05/markov-chain-2048.html)
