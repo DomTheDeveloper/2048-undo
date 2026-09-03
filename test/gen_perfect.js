@@ -46,17 +46,21 @@ var VERBOSE = process.env.V === "1";
 //                 mass 262,140 at +4 a move is 65,533 moves whatever
 //                 the route, so only reachability needs constructing.
 //   TARGET=score — the maximum-score game: the same complete spiral,
-//                 fed with 2s. Two 4-spawns are structurally forced
-//                 (the last two of the game — the tail's staging
-//                 squeeze leaves no room to build them), so the line
-//                 is exactly (262140 - 4 - 8)/2 + 2 = 131,066 moves
-//                 from two starting 2s, scoring exactly 3,932,156.
+//                 fed with 2s. Two 4-spawns are structurally forced,
+//                 one per act boundary: the fold-entry and the final
+//                 death are both full-board squeezes where the tail 4
+//                 cannot be staged from 2+2 (no room for the pair). So
+//                 the line is exactly (262140 - 4 - 8)/2 + 2 = 131,066
+//                 moves from two starting 2s, scoring exactly 3,932,156.
 var TARGET = process.env.TARGET === "tile" ? "tile"
            : process.env.TARGET === "score" ? "score" : "full";
 var PLANT = TARGET === "score" ? 2 : 4;
 var START_MASS = TARGET === "score" ? 4 : 8;
-// 4-plants unlock only at the death squeeze (the last three spawns).
-var LATE_MASS = 262140 - 12;
+// 4-plants unlock only inside the two squeezes: the fold-entry (board
+// mass approaching 131,072) and the final death (approaching 262,140).
+function squeeze(bm) {
+  return (bm >= 131060 && bm <= 131080) || bm >= 262128;
+}
 
 function chainDone(b) {
   for (var i = 0; i < 16; i++) {
@@ -156,7 +160,7 @@ function candidates(b, seen, shallow) {
     if (PLANT === 2) {
       var bm = 0;
       for (var bmi = 0; bmi < 16; bmi++) bm += sim.board[bmi];
-      if (bm >= LATE_MASS) pvals = [2, 4];
+      if (squeeze(bm)) pvals = [2, 4];
     }
     for (var pi = 0; pi < plants.length; pi++) {
      for (var pvi = 0; pvi < pvals.length; pvi++) {
