@@ -270,6 +270,18 @@
     return true;
   }
 
+  // The 131072 spiral: every power of two from 131072 down to 4, one
+  // per cell, snaked head to tail. It is simultaneously the
+  // maximum-score death board and the most beautiful position in the
+  // game — and it is dead by construction (adjacent cells always
+  // differ), so a game that reaches it ends on it.
+  function fullChain(b, S) {
+    for (var i = 0; i < CELLS; i++) {
+      if (b[S[i]] !== (1 << (17 - i))) return false;
+    }
+    return true;
+  }
+
   // ------------------------------------------------------------------
   // Build search: DFS to the next junk-free checkpoint
   // ------------------------------------------------------------------
@@ -674,15 +686,18 @@
   //
   // Codec: two hex chars per step; bits 0-1 dir, 2-5 cell, 6 value
   // (0 = spawn 4, 1 = spawn 2 — 2s appear only in the fold's junk).
-  function decodePerfectLine() {
+  function decodePerfectLine(which) {
     var data = null;
     if (typeof module !== "undefined" && typeof require === "function") {
       try { data = require("./perfect_line.js"); } catch (e) {}
     }
     if (!data && typeof PERFECT_LINE !== "undefined") data = PERFECT_LINE;
     if (!data && global && global.PERFECT_LINE) data = global.PERFECT_LINE;
-    if (!data || !data.hex) return null;
-    var hex = data.hex;
+    if (!data) return null;
+    // "tile" = the 32,781-move line to the 131072 tile; "full" = the
+    // 65,533-move line that keeps building to the complete spiral.
+    var hex = which === "full" ? data.full : data.hex;
+    if (!hex) return null;
     var steps = new Array(hex.length >> 1);
     for (var i = 0; i < steps.length; i++) {
       var byte = parseInt(hex.substr(i * 2, 2), 16);
@@ -706,8 +721,8 @@
     return { dir: dir, cell: y * 4 + x, value: step.value };
   }
 
-  function perfectBook(corner) {
-    var raw = decodePerfectLine();
+  function perfectBook(corner, which) {
+    var raw = decodePerfectLine(which);
     if (!raw) return null;
     var steps = new Array(raw.length);
     for (var i = 0; i < raw.length; i++) steps[i] = transformStep(raw[i], corner);
@@ -749,9 +764,14 @@
   //                the full descending chain 65536, 32768, ... beside it
   //                until the board dies full and mergeless. Theoretical
   //                ceiling: 3,932,156 points.
+  // goal "spiral" — end on the full 131072 chain: build the tile, then
+  //                  keep going until every power of two sits on the
+  //                  board at once. 4-feeds; the fewest-moves road to
+  //                  the same death board MAX SCORE reaches with 2s.
   function SuperAI(corner, opts) {
     this.corner = corner;
-    this.goal = (opts && opts.goal) === "score" ? "score" : "tile";
+    var g = opts && opts.goal;
+    this.goal = g === "score" ? "score" : g === "spiral" ? "spiral" : "tile";
     // Perfect: the move-minimal game. Mass is conserved by slides and
     // grows only by spawns, so with every build spawn a 4 the build to
     // the primed 131072-chain takes EXACTLY (131072-8)/4 = 32,766
@@ -788,11 +808,14 @@
     o.deadEnds = this.deadEnds;
     o.exactDead = this.perfect;
     o.pair44 = this.perfect;
-    o.goal = this.goal;
+    // A spiral run IS a score run to the search: same second act, same
+    // healing regime, same death board — only the spawn dial and the
+    // done condition differ, and those live up here.
+    o.goal = this.goal === "spiral" ? "score" : this.goal;
     // Sprint feeds 4s (twice the mass per move); a score run feeds 2s —
     // every spawned 4 forfeits the 4 points its skipped merge was worth.
     // Perfect feeds ONLY 4s: a single 2 in the build would break the
-    // exact 32,781-move ledger (each pair of 2s costs one extra move).
+    // exact move ledger (each pair of 2s costs one extra move).
     o.valueOrder = this.goal === "score" ? [2, 4]
                  : this.perfect ? [4]
                  : [4, 2];
@@ -857,7 +880,8 @@
   SuperAI.prototype.bookPlan = function (board) {
     if (this.book === false) return null;
     if (this.book === null) {
-      this.book = perfectBook(this.corner) || false;
+      this.book = perfectBook(this.corner,
+                              this.goal === "spiral" ? "full" : "tile") || false;
       if (!this.book) return null;
       this.bookPos = 0;
       this.bookKey = this.book.start.join(",");
@@ -894,6 +918,13 @@
     var S = this.S;
     if (this.goal === "tile") {
       if (maxTile(board) >= 131072) return { type: "done" };
+    } else if (this.goal === "spiral") {
+      // The spiral goal ends on ONE exact board: the full descending
+      // chain. Any other death is a failed line.
+      if (fullChain(board, S)) return { type: "done" };
+      if (boardDead(board)) {
+        return { type: "stuck", reason: "board died off the spiral" };
+      }
     } else {
       // Max score: 131072 is the halfway mark; done means the board
       // died full and mergeless with the descending chain stacked.
@@ -929,7 +960,7 @@
       var script = this.foldCache[fKey];
       if (!script) {
         script = collapseSearch(board, S, this.collapseMemo,
-                                this.goal === "score");
+                                this.goal !== "tile");
         if (script && script.length) {
           this.foldCache[fKey] = script;
           this.collapseMemo = {}; // release the search's giant memo
@@ -958,7 +989,7 @@
     // pinned as a hard anchor.
     var useS = S;
     var anchored = false;
-    if (this.goal === "score" && board[S[0]] === 131072) {
+    if (this.goal !== "tile" && board[S[0]] === 131072) {
       var subAna = analyze(board, this.subS, true);
       var subExtras = 0;
       for (var se = subAna.packedLen; se < this.subS.length; se++) {
@@ -1082,9 +1113,12 @@
   SuperDriver.prototype.step = function () {
     var gm = this.gm;
     var board = this.readBoard();
-    if (this.ai.goal === "score"
-        ? (boardDead(board) && maxTile(board) >= 131072)
-        : maxTile(board) >= 131072) {
+    var goalMet = this.ai.goal === "score"
+      ? (boardDead(board) && maxTile(board) >= 131072)
+      : this.ai.goal === "spiral"
+        ? fullChain(board, this.ai.S)
+        : maxTile(board) >= 131072;
+    if (goalMet) {
       return { type: "done" };
     }
 
@@ -1094,7 +1128,7 @@
       cache = this.planCache = null;
     }
     if (!cache && this.unwinding &&
-        !(this.ai.goal === "score" && board[this.ai.S[0]] >= 131072)) {
+        !(this.ai.goal !== "tile" && board[this.ai.S[0]] >= 131072)) {
       // Mid-unwind, don't waste full searches on obvious wrecks (they
       // are stranded-shaped mid-line intermediates); just step back.
       // Not in a score run's second act, though: healing rests carry
@@ -1317,8 +1351,9 @@
   };
 
   HeadlessRunner.prototype.goalDone = function (b) {
-    if (this.goal !== "score") return maxTile(b) >= 131072;
-    return maxTile(b) >= 131072 && boardDead(b);
+    if (this.goal === "score") return maxTile(b) >= 131072 && boardDead(b);
+    if (this.goal === "spiral") return fullChain(b, this.S);
+    return maxTile(b) >= 131072;
   };
 
   // Commit one planned spawn. Predictable mode places it; super mode
@@ -1380,7 +1415,7 @@
         // Skip planning on obviously wrecked mid-line intermediates —
         // except in a score run's second act, where stranded tiles are
         // the normal look of a perfectly plannable board.
-        if (!(this.goal === "score" && this.board[this.S[0]] >= 131072)) {
+        if (!(this.goal !== "tile" && this.board[this.S[0]] >= 131072)) {
           while (this.hist.length &&
                  analyze(this.board, this.S, true).stranded) {
             var h2 = this.hist.pop();
@@ -1425,7 +1460,8 @@
     chainComplete: chainComplete,
     maxTile: maxTile,
     debugChildren: debugChildren,
-    perfectBook: perfectBook
+    perfectBook: perfectBook,
+    fullChain: fullChain
   };
 
   if (typeof module !== "undefined" && module.exports) {

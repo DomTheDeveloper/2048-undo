@@ -59,12 +59,16 @@ function fmt(b) {
 }
 
 // The perfect game is computed, not driven: pure matrix data, forward
-// only. The search explores internally; the line that survives IS the
-// game — exactly 32,781 moves, zero undos, by the mass ledger.
+// only. GOAL=spiral verifies the 65,533-move line to the complete
+// chain (score exactly 3,670,024); the default verifies the
+// 32,781-move line to the 131072 tile. Zero undos either way, by the
+// mass ledger.
 function runPerfect(corner) {
   var t0 = Date.now();
+  var goal = process.env.GOAL === "spiral" ? "spiral" : "tile";
+  var wantMoves = goal === "spiral" ? 65533 : 32781;
   var runner = new Super.HeadlessRunner(corner,
-    { goal: "tile", perfect: true, predictable: true });
+    { goal: goal, perfect: true, predictable: true });
   var MAX_MS = (Number(process.env.MAX_MIN) || 70) * 60 * 1000;
   var lastBeat = 0;
   while (!runner.run(1000)) {
@@ -85,20 +89,32 @@ function runPerfect(corner) {
   }
   var b = runner.board;
   var S = Super.snakeCells(corner);
-  var ok = b[S[0]] === 131072 &&
-           runner.stats.moves === 32781 &&
-           runner.stats.undos === 0;
-  console.log("[" + corner + "] PERFECT DONE in " +
+  var ok;
+  if (goal === "spiral") {
+    ok = Super.fullChain(b, S) &&
+         runner.stats.moves === 65533 &&
+         runner.stats.undos === 0 &&
+         runner.stats.score === 3670024;
+  } else {
+    ok = b[S[0]] === 131072 &&
+         runner.stats.moves === 32781 &&
+         runner.stats.undos === 0;
+  }
+  console.log("[" + corner + "] PERFECT " +
+    (goal === "spiral" ? "SPIRAL " : "") + "DONE in " +
     ((Date.now() - t0) / 1000).toFixed(1) + "s" +
-    "  line=" + runner.stats.moves + " (minimum 32,781)" +
+    "  line=" + runner.stats.moves + " (minimum " + wantMoves + ")" +
     "  undos=" + runner.stats.undos +
     "  explored=" + runner.stats.explored +
     "  backtracks=" + runner.stats.backtracks +
     "  restarts=" + runner.stats.restarts +
     "  score=" + runner.stats.score);
   console.log(fmt(b));
-  if (!ok) console.error("[" + corner + "] FAIL: want 131072 in " + corner +
-    ", line === 32781, undos === 0");
+  if (!ok) {
+    console.error("[" + corner + "] FAIL: " + (goal === "spiral"
+      ? "want the full chain, line === 65533, undos === 0, score === 3,670,024"
+      : "want 131072 in " + corner + ", line === 32781, undos === 0"));
+  }
   return ok;
 }
 
@@ -108,7 +124,8 @@ function runCorner(corner) {
   var game = makeGame();
   var gm = game.gm;
 
-  var goal = process.env.GOAL === "score" ? "score" : "tile";
+  var goal = process.env.GOAL === "score" ? "score"
+           : process.env.GOAL === "spiral" ? "spiral" : "tile";
   var driver = new Super.SuperDriver(gm, corner, game.Tile,
     { verify: true, trace: process.env.TRACE === "1",
       predictable: process.env.PREDICTABLE === "1",
@@ -285,6 +302,10 @@ function runCorner(corner) {
     ok = b[S[0]] === 131072 && dead && gm.score >= 3930000;
     console.log("[" + corner + "] score-goal: score=" + gm.score +
       " (ceiling 3,932,156)  dead=" + dead);
+  } else if (goal === "spiral") {
+    ok = Super.fullChain(b, S);
+    console.log("[" + corner + "] spiral-goal: fullChain=" + ok +
+      "  score=" + gm.score);
   } else {
     ok = b[S[0]] === 131072;
   }

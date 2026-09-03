@@ -35,6 +35,29 @@ var CORNER = "br"; // canonical; other corners are transforms
 var S = Super.snakeCells(CORNER);
 var VERBOSE = process.env.V === "1";
 
+// Two perfect lines share this generator:
+//   TARGET=tile — the 32,781-move game to the 131072 tile (build the
+//                 primed spiral in exactly 32,766 moves, then the
+//                 proven 15-move fold).
+//   TARGET=full — the 65,533-move game to the COMPLETE spiral: fold
+//                 the tile mid-line, then keep building until every
+//                 power of two from 131072 down to 4 sits on the board
+//                 at once. The ledger is target-agnostic: mass 8 to
+//                 mass 262,140 at +4 a move is 65,533 moves whatever
+//                 the route, so only reachability needs constructing.
+var TARGET = process.env.TARGET === "tile" ? "tile" : "full";
+
+function chainDone(b) {
+  for (var i = 0; i < 16; i++) {
+    if (b[S[i]] !== (1 << (17 - i))) return false;
+  }
+  return true;
+}
+function targetDone(b) {
+  return TARGET === "full" ? chainDone(b) : spiralReached(b);
+}
+var TARGET_MOVES = TARGET === "full" ? 65533 : 32766;
+
 function xy(i) { return { x: i % 4, y: (i / 4) | 0 }; }
 function dirFromTo(a, b) {
   var A = xy(a), B = xy(b);
@@ -118,7 +141,21 @@ function candidates(b, seen, shallow) {
       nb[plants[pi]] = 4;
       var key = nb.join(",");
       if (seen[key]) continue;
-      if (!spiralReached(nb)) {
+      // Once the 131072 exists, nothing may ever sit head-ward of it:
+      // no smaller tile can merge its way past, so such boards are
+      // unwinnable however long they stay mobile.
+      var hi = -1;
+      for (var hj = 0; hj < 16; hj++) {
+        if (nb[S[hj]] === 131072) { hi = hj; break; }
+      }
+      if (hi > 0) {
+        var blocked = false;
+        for (var hk = 0; hk < hi; hk++) {
+          if (nb[S[hk]]) { blocked = true; break; }
+        }
+        if (blocked) continue;
+      }
+      if (!targetDone(nb)) {
         var mobile = false;
         var mz = -1;
         for (var mzi = 0; mzi < 16; mzi++) if (!nb[S[mzi]]) { mz = mzi; break; }
@@ -132,11 +169,17 @@ function candidates(b, seen, shallow) {
         // have every onward move die at once. The classic trap is the
         // very last plant — seating the second-to-last 4 shallow
         // ([16,8,4,_] row) reads as a longer walk but forces game over
-        // one move short of the spiral; only [16,8,_,4] can finish.
+        // one move short of the target; only [16,8,_,4] can finish.
+        // Only within a few spawns of the target mass — the fold and
+        // the post-fold swamp legitimately live at 1-2 empties for
+        // thousands of moves, and the trap only exists at the very end.
         if (!shallow) {
-          var empties = 0;
-          for (var ei = 0; ei < 16; ei++) if (!nb[ei]) empties++;
-          if (empties <= 2 && candidates(nb, {}, true).length === 0) continue;
+          var empties = 0, nbMass = 0;
+          for (var ei = 0; ei < 16; ei++) {
+            if (nb[ei]) nbMass += nb[ei]; else empties++;
+          }
+          if (empties <= 2 && TARGET_MOVES * 4 + 8 - nbMass <= 24 &&
+              candidates(nb, {}, true).length === 0) continue;
         }
       }
       out.push({ dir: dir, cell: plants[pi], nb: nb, key: key, h: H(nb) });
@@ -191,21 +234,26 @@ function generateBuild() {
     var ck = JSON.parse(fs.readFileSync(CKPT, "utf8"));
     var cm = 0;
     for (var ci = 0; ci < 16; ci++) cm += ck.board[ci];
-    if (cm !== 8 + 4 * ck.steps.length) {
+    if (ck.target && ck.target !== TARGET) {
+      console.log("  checkpoint is for TARGET=" + ck.target + ", starting fresh");
+    } else if (cm !== 8 + 4 * ck.steps.length) {
       throw new Error("checkpoint fails the mass ledger");
+    } else {
+      b = ck.board;
+      steps = ck.steps;
+      console.log("  resumed at move " + steps.length);
     }
-    b = ck.board;
-    steps = ck.steps;
-    console.log("  resumed at move " + steps.length);
   }
 
-  while (!spiralReached(b)) {
+  var milestone = 0;
+  while (!targetDone(b)) {
     if (CKPT && Date.now() - lastCkpt >= 15000) {
       lastCkpt = Date.now();
-      fs.writeFileSync(CKPT + ".tmp", JSON.stringify({ board: b, steps: steps }));
+      fs.writeFileSync(CKPT + ".tmp",
+        JSON.stringify({ target: TARGET, board: b, steps: steps }));
       fs.renameSync(CKPT + ".tmp", CKPT);
     }
-    if (steps.length > 32766) {
+    if (steps.length > TARGET_MOVES) {
       throw new Error("overran the ledger at " + steps.length + " moves");
     }
     var cur = H(b);
@@ -224,6 +272,10 @@ function generateBuild() {
     for (var k = 0; k < pick.length; k++) {
       steps.push({ dir: pick[k].dir, cell: pick[k].cell, value: 4 });
       b = pick[k].nb;
+      if (!milestone && Super.maxTile(b) >= 131072) {
+        milestone = steps.length;
+        console.log("  131072 forms at move " + milestone);
+      }
     }
     if (VERBOSE && Date.now() - lastReport >= 5000) {
       lastReport = Date.now();
@@ -231,11 +283,12 @@ function generateBuild() {
         " " + ((Date.now() - t0) / 1000).toFixed(1) + "s");
     }
   }
-  if (steps.length !== 32766) {
-    throw new Error("spiral in " + steps.length + " moves; ledger says 32766");
+  if (steps.length !== TARGET_MOVES) {
+    throw new Error("target in " + steps.length + " moves; ledger says " +
+      TARGET_MOVES);
   }
   if (CKPT) { try { fs.unlinkSync(CKPT); } catch (e) {} }
-  return { steps: steps, board: b };
+  return { steps: steps, board: b, milestone: milestone };
 }
 
 function encode(steps) {
@@ -248,11 +301,12 @@ function encode(steps) {
   return out.join("");
 }
 
-function verifyCorner(corner) {
-  var book = Super.perfectBook(corner);
-  if (!book) throw new Error("perfectBook(" + corner + ") failed to load");
+function verifyCorner(corner, which) {
+  var book = Super.perfectBook(corner, which);
+  if (!book) throw new Error("perfectBook(" + corner + "," + which + ") failed to load");
   var Sc = Super.snakeCells(corner);
   var b = book.start.slice();
+  var score = 0;
   for (var i = 0; i < book.steps.length; i++) {
     var st = book.steps[i];
     var sim = Super.simMove(b, st.dir);
@@ -262,48 +316,86 @@ function verifyCorner(corner) {
     if (sim.board[st.cell] !== 0) {
       throw new Error(corner + ": step " + i + " spawns on occupied cell");
     }
+    for (var m = 0; m < sim.merges.length; m++) score += sim.merges[m];
     sim.board[st.cell] = st.value;
     b = sim.board;
   }
-  if (b[Sc[0]] !== 131072) {
-    throw new Error(corner + ": final board lacks 131072 in the corner");
+  if (which === "full") {
+    if (book.steps.length !== 65533) {
+      throw new Error(corner + ": " + book.steps.length + " steps, want 65533");
+    }
+    if (!Super.fullChain(b, Sc)) {
+      throw new Error(corner + ": final board is not the full spiral");
+    }
+    for (var d = 0; d < 4; d++) {
+      if (Super.simMove(b, d).moved) {
+        throw new Error(corner + ": full-spiral board is not dead");
+      }
+    }
+    // Path-independent given all-4 spawns: every tile 2^k built from
+    // 4s banks (k-2)*2^k, and the full chain sums to exactly 3,670,024.
+    if (score !== 3670024) {
+      throw new Error(corner + ": score " + score + ", want 3,670,024");
+    }
+    console.log("  " + corner + ": 65,533 steps replay clean — full spiral, " +
+      "dead board, score 3,670,024");
+  } else {
+    if (book.steps.length !== 32781) {
+      throw new Error(corner + ": " + book.steps.length + " steps, want 32781");
+    }
+    if (b[Sc[0]] !== 131072) {
+      throw new Error(corner + ": final board lacks 131072 in the corner");
+    }
+    console.log("  " + corner + ": 32,781 steps replay clean, 131072 seated");
   }
-  if (book.steps.length !== 32781) {
-    throw new Error(corner + ": " + book.steps.length + " steps, want 32781");
-  }
-  console.log("  " + corner + ": 32,781 steps replay clean, 131072 seated");
 }
 
-console.log("building the 32,766-move counter line (" + CORNER + ")...");
+console.log("building the " + (TARGET === "full" ? "65,533" : "32,766") +
+  "-move counter line (TARGET=" + TARGET + ", " + CORNER + ")...");
 var build = generateBuild();
-console.log("  spiral reached, ledger exact");
+console.log("  target reached, ledger exact" +
+  (build.milestone ? " — 131072 formed at move " + build.milestone : ""));
 
-console.log("folding (engine's proven 15-move collapse)...");
-var ai = new Super.SuperAI(CORNER, { goal: "tile" });
-var fold = ai.plan(build.board);
-if (fold.type !== "line" || fold.phase !== "finale") {
-  throw new Error("fold plan came back " + fold.type + "/" + fold.phase);
+var line;
+if (TARGET === "tile") {
+  console.log("folding (engine's proven 15-move collapse)...");
+  var ai = new Super.SuperAI(CORNER, { goal: "tile" });
+  var fold = ai.plan(build.board);
+  if (fold.type !== "line" || fold.phase !== "finale") {
+    throw new Error("fold plan came back " + fold.type + "/" + fold.phase);
+  }
+  if (fold.steps.length !== 15) {
+    throw new Error("fold took " + fold.steps.length + " moves, want 15");
+  }
+  line = build.steps.concat(fold.steps);
+  console.log("  fold is 15 moves; total " + line.length);
+} else {
+  line = build.steps; // the fold happened mid-line, inside the greedy
 }
-if (fold.steps.length !== 15) {
-  throw new Error("fold took " + fold.steps.length + " moves, want 15");
-}
-var line = build.steps.concat(fold.steps);
-console.log("  fold is 15 moves; total " + line.length);
 
-var hex = encode(line);
+// Preserve whichever other line is already shipped.
+var existing = {};
+try { existing = require(path.join(__dirname, "..", "js", "perfect_line.js")); }
+catch (e) {}
+var hexTile = TARGET === "tile" ? encode(line) : existing.hex;
+var hexFull = TARGET === "full" ? encode(line) : existing.full;
+
 var out = "// Generated by test/gen_perfect.js — do not edit.\n" +
   "//\n" +
-  "// The perfect 2048 game to the 131072 tile as data: 32,781 moves,\n" +
-  "// zero undos. Two hex chars per step: bits 0-1 direction (0 up,\n" +
-  "// 1 right, 2 down, 3 left), bits 2-5 spawn cell (y*4+x), bit 6\n" +
-  "// spawn value (0 = 4, 1 = 2; 2s only in the fold's junk spawns).\n" +
-  "// Canonical corner: bottom-right; the engine mirrors it for the\n" +
-  "// others. The length is forced by the mass ledger — slides conserve\n" +
-  "// mass, each move spawns once — so (131072-8)/4 = 32,766 build\n" +
-  "// moves plus the proven-minimal 15-move fold.\n" +
+  "// The perfect 2048 games as data. Two hex chars per step: bits 0-1\n" +
+  "// direction (0 up, 1 right, 2 down, 3 left), bits 2-5 spawn cell\n" +
+  "// (y*4+x), bit 6 spawn value (0 = 4, 1 = 2). Canonical corner:\n" +
+  "// bottom-right; the engine mirrors it for the others. Lengths are\n" +
+  "// forced by the mass ledger (slides conserve mass, each move spawns\n" +
+  "// once):\n" +
+  "//   hex  — to the 131072 tile: (131072-8)/4 = 32,766 build moves\n" +
+  "//          plus the proven-minimal 15-move fold = 32,781.\n" +
+  "//   full — to the COMPLETE spiral, 131072 down to 4 filling the\n" +
+  "//          board: (262140-8)/4 = 65,533 moves, score 3,670,024.\n" +
   "(function (root) {\n" +
-  "  var api = { hex:\n" +
-  "\"" + hex + "\"\n" +
+  "  var api = {\n" +
+  (hexTile ? "    hex:\n\"" + hexTile + "\",\n" : "") +
+  (hexFull ? "    full:\n\"" + hexFull + "\"\n" : "") +
   "  };\n" +
   "  if (typeof module !== \"undefined\" && module.exports) {\n" +
   "    module.exports = api;\n" +
@@ -317,5 +409,9 @@ fs.writeFileSync(target, out);
 console.log("wrote " + target + " (" + (out.length / 1024).toFixed(1) + " KB)");
 
 console.log("verifying by full replay, all corners...");
-["br", "bl", "tr", "tl"].forEach(verifyCorner);
+delete require.cache[require.resolve(target)];
+["br", "bl", "tr", "tl"].forEach(function (c) {
+  if (hexTile) verifyCorner(c, "tile");
+  if (hexFull) verifyCorner(c, "full");
+});
 console.log("PERFECT LINE VERIFIED");
