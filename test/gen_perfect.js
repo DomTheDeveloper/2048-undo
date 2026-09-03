@@ -170,16 +170,14 @@ function candidates(b, seen, shallow) {
         // very last plant — seating the second-to-last 4 shallow
         // ([16,8,4,_] row) reads as a longer walk but forces game over
         // one move short of the target; only [16,8,_,4] can finish.
-        // Only within a few spawns of the target mass — the fold and
-        // the post-fold swamp legitimately live at 1-2 empties for
-        // thousands of moves, and the trap only exists at the very end.
+        // Active whenever the board is nearly full: the trap exists at
+        // BOTH era boundaries (the primed spiral before the fold, and
+        // the complete chain at the very end), and the fold-era boards
+        // that live at 1-2 empties simply pay the one extra ply.
         if (!shallow) {
-          var empties = 0, nbMass = 0;
-          for (var ei = 0; ei < 16; ei++) {
-            if (nb[ei]) nbMass += nb[ei]; else empties++;
-          }
-          if (empties <= 2 && TARGET_MOVES * 4 + 8 - nbMass <= 24 &&
-              candidates(nb, {}, true).length === 0) continue;
+          var empties = 0;
+          for (var ei = 0; ei < 16; ei++) if (!nb[ei]) empties++;
+          if (empties <= 2 && candidates(nb, {}, true).length === 0) continue;
         }
       }
       out.push({ dir: dir, cell: plants[pi], nb: nb, key: key, h: H(nb) });
