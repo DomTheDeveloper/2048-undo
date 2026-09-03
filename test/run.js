@@ -124,10 +124,28 @@ function runCorner(corner) {
   var elapsedOffset = 0;
   var finaleSpawnedFour = false;
   var resumed = false;
-  if (CKPT && fs.existsSync(CKPT)) {
+  var ckptFlip = false;
+  // Two alternating slots, each written tmp-then-rename with an fsync
+  // in between: a container that dies mid-write can lose the data pages
+  // of the newest slot but never both, so the loader takes the valid
+  // slot with the most moves.
+  function loadCheckpoint() {
+    var best = null;
+    [CKPT, CKPT + ".alt"].forEach(function (f) {
+      try {
+        var c = JSON.parse(fs.readFileSync(f, "utf8"));
+        if (c.corner === corner && c.goal === goal &&
+            (!best || c.stats.moves > best.stats.moves)) {
+          best = c;
+        }
+      } catch (e) {}
+    });
+    return best;
+  }
+  if (CKPT) {
     try {
-      var ck = JSON.parse(fs.readFileSync(CKPT, "utf8"));
-      if (ck.corner === corner && ck.goal === goal) {
+      var ck = loadCheckpoint();
+      if (ck) {
         gm.grid.build();
         for (var ci = 0; ci < 16; ci++) {
           if (ck.board[ci]) {
@@ -149,9 +167,6 @@ function runCorner(corner) {
           " undoDepth=" + gm.undoStack.length +
           " prior=" + (elapsedOffset / 1000).toFixed(1) + "s" +
           " board=[" + ck.board.join(",") + "]");
-      } else {
-        console.error("[" + corner + "] checkpoint is for " + ck.corner +
-          "/" + ck.goal + ", ignoring");
       }
     } catch (e) {
       console.error("[" + corner + "] checkpoint load failed: " + e.message);
@@ -228,7 +243,10 @@ function runCorner(corner) {
         " board=[" + driver.readBoard().join(",") + "]");
       if (CKPT) {
         try {
-          fs.writeFileSync(CKPT + ".tmp", JSON.stringify({
+          var target = ckptFlip ? CKPT + ".alt" : CKPT;
+          ckptFlip = !ckptFlip;
+          var fd = fs.openSync(target + ".tmp", "w");
+          fs.writeSync(fd, JSON.stringify({
             corner: corner, goal: goal,
             board: driver.readBoard(), score: gm.score,
             undoStack: gm.undoStack,
@@ -236,7 +254,9 @@ function runCorner(corner) {
             elapsed: elapsed(),
             primed4: finaleSpawnedFour
           }));
-          fs.renameSync(CKPT + ".tmp", CKPT);
+          fs.fsyncSync(fd);
+          fs.closeSync(fd);
+          fs.renameSync(target + ".tmp", target);
         } catch (e) {
           console.error("[" + corner + "] checkpoint write failed: " + e.message);
         }
@@ -268,7 +288,11 @@ function runCorner(corner) {
   } else {
     ok = b[S[0]] === 131072;
   }
-  if (CKPT && ok) { try { fs.unlinkSync(CKPT); } catch (e) {} }
+  if (CKPT && ok) {
+    [CKPT, CKPT + ".alt"].forEach(function (f) {
+      try { fs.unlinkSync(f); } catch (e) {}
+    });
+  }
   console.log("[" + corner + "] DONE in " + (elapsed() / 1000).toFixed(1) + "s" +
     "  moves=" + driver.stats.moves +
     "  undos=" + driver.stats.undos +
