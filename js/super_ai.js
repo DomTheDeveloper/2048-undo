@@ -911,6 +911,14 @@
     }
     if (this.bookPos >= this.book.steps.length) return null;
     var end = Math.min(this.bookPos + 2000, this.book.steps.length);
+    // Serve the last stretch as its own finale chunk: a rendered run
+    // gets the slow-motion ending over the true finale, not over a
+    // whole 2000-step tail.
+    var FIN = 40;
+    if (end === this.book.steps.length &&
+        this.book.steps.length - this.bookPos > FIN + 5) {
+      end = this.book.steps.length - FIN;
+    }
     var steps = this.book.steps.slice(this.bookPos, end);
     var nb = board.slice();
     for (var k = 0; k < steps.length; k++) {
@@ -1096,13 +1104,25 @@
       }
       var cells = this.grid.availableCells();
       if (!cells.length) return;
-      // A move-minimal perfect game is all 4s from the very first two
-      // tiles: a stray 2 could never merge again (no partner will ever
-      // spawn) and would poison the board for good. A perfect score
-      // game is the opposite dial — all 2s.
-      var value = self.ai.perfect
-        ? (self.ai.goal === "score" ? 2 : 4)
-        : (Math.random() < 0.9 ? 2 : 4);
+      if (self.ai.perfect) {
+        // Canonical fallback: the book line is defined from the two
+        // starting tiles seated at the head of the snake (2s for the
+        // score line, 4s for the move-minimal ones — a stray 2 in an
+        // all-4 game could never merge again). First empty snake cell,
+        // deterministic, so a fresh restart lands exactly on the line.
+        var Sc = self.ai.S;
+        var pc = null;
+        for (var si = 0; si < Sc.length && !pc; si++) {
+          var cand = { x: Sc[si] % 4, y: (Sc[si] / 4) | 0 };
+          if (this.grid.cellAvailable(cand)) pc = cand;
+        }
+        if (!pc) return;
+        var pv = self.ai.goal === "score" ? 2 : 4;
+        this.grid.insertTile(new Tile(pc, pv));
+        self.lastSpawn = { x: pc.x, y: pc.y, value: pv };
+        return;
+      }
+      var value = Math.random() < 0.9 ? 2 : 4;
       var cell = cells[(Math.random() * cells.length) | 0];
       this.grid.insertTile(new Tile(cell, value));
       self.lastSpawn = { x: cell.x, y: cell.y, value: value };

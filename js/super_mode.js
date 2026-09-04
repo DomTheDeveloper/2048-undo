@@ -32,8 +32,7 @@
     requestedKey: null,
     savedProtoMove: null,
     savedProtoRestart: null,
-    headless: null,
-    headlessLastRender: 0
+    headless: null
   };
 
   function $(sel) { return document.querySelector(sel); }
@@ -123,14 +122,6 @@
     return grid;
   }
 
-  function renderSnapshot(board, score) {
-    var g = gm();
-    g.actuator.actuate(buildGrid(board, true), {
-      score: score, over: false, won: false,
-      bestScore: g.scoreManager.get(), terminated: false
-    });
-  }
-
   function installBoard(board, score) {
     var g = gm();
     controller.aiActing = true;
@@ -166,7 +157,6 @@
     controller.driver = null;
     controller.headless = { stats: { moves: 0, attempts: 0, undos: 0, score: 0 },
                             board: null, elapsed: 0 };
-    controller.headlessLastRender = 0;
     controller.worker = worker;
 
     installHooks();
@@ -190,12 +180,9 @@
         stopRun("won");
         return;
       }
-      var now = Date.now();
-      if (controller.mode !== "perfect" &&
-          now - controller.headlessLastRender > 120) {
-        controller.headlessLastRender = now;
-        renderSnapshot(msg.board, msg.stats.score);
-      }
+      // Headless means headless: no rendering at all mid-run — the
+      // board stays dimmed and frozen, only the counters live. The
+      // final position installs when the run ends (or is stopped).
       updateHud(false);
     };
     worker.onerror = function () {
@@ -208,9 +195,9 @@
                          perfect: controller.mode === "perfect" });
 
     document.body.classList.add("super-running");
-    if (controller.mode === "perfect") {
-      document.body.classList.add("super-computing");
-    }
+    // Every headless run turns the renderer off: dim and freeze the
+    // grid until the finished position lands.
+    document.body.classList.add("super-computing");
     updateControls();
     // Just keep the clock ticking; progress messages drive everything else.
     controller.pumpId = setInterval(function () {
@@ -331,9 +318,11 @@
 
   function startRun() {
     if (controller.running) return;
-    // PERFECT is computed, never driven: pure matrix data, no grid
-    // rendering, no undos — whatever speed chip is lit.
-    if (controller.speed === "headless" || controller.mode === "perfect") {
+    // 🧮 HEADLESS runs in the worker with the renderer off. Everything
+    // else — PERFECT included — plays on the visible grid: a rendered
+    // PERFECT run replays the whole book move by move at the chosen
+    // speed, finale in slow motion, zero undos.
+    if (controller.speed === "headless") {
       startHeadless();
       return;
     }
@@ -596,13 +585,17 @@
       var thinking = controller.plannerBusySince &&
         Date.now() - controller.plannerBusySince > 400;
       var max = Super.maxTile(d.readBoard());
+      var bookOf = controller.mode === "perfect"
+        ? "move " + fmtInt(d.stats.moves) + " of " +
+          (controller.goal === "spiral" ? "65,533"
+         : controller.goal === "score" ? "131,066" : "32,781") + " — "
+        : null;
       var progress = controller.goal === "score"
-        ? "score " + fmtInt(gm().score) + " / 3,932,156 — largest tile " + fmtInt(max)
+        ? (bookOf || "") + "score " + fmtInt(gm().score) +
+          " / 3,932,156 — largest tile " + fmtInt(max)
         : controller.goal === "spiral"
-        ? "building the FULL spiral — largest tile " + fmtInt(max)
-        : (controller.mode === "perfect"
-            ? "move " + fmtInt(d.stats.moves - d.stats.undos) + " of 32,781 — "
-            : "building the spiral — ") + "largest tile " + fmtInt(max);
+        ? (bookOf || "building the FULL spiral — ") + "largest tile " + fmtInt(max)
+        : (bookOf || "building the spiral — ") + "largest tile " + fmtInt(max);
       setStatus((thinking ? "thinking… — " : "") + progress +
         (controller.mode === "predictable" ? " (spawns by design)" : ""));
     }
@@ -614,10 +607,8 @@
       controller.running ? "STOP" : "SUPER MODE";
     $all(".super-speed").forEach(function (el) {
       el.classList.toggle("selected",
-        controller.mode === "perfect"
-          ? el.getAttribute("data-speed") === "headless"
-          : el.getAttribute("data-speed") === controller.speed);
-      el.classList.toggle("disabled", controller.mode === "perfect");
+        el.getAttribute("data-speed") === controller.speed);
+      el.classList.toggle("disabled", false);
     });
     $all(".super-corner-cell").forEach(function (el) {
       el.classList.toggle("selected", el.getAttribute("data-corner") === controller.corner);
@@ -733,6 +724,13 @@
         if (controller.running) return; // pick before you launch
         controller.mode = el.getAttribute("data-mode");
         savePref("super2048.mode", controller.mode);
+        if (controller.mode === "perfect") {
+          // The instant computed run is PERFECT's default experience;
+          // picking a rendered speed afterwards plays the whole book
+          // on the visible grid instead.
+          controller.speed = "headless";
+          savePref("super2048.speed", controller.speed);
+        }
         updateControls();
       });
     });

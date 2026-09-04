@@ -14,13 +14,13 @@ the whole chain folds into **131072**, the highest tile 2048's rules allow.
 
 - Pick the target corner (bottom-right by default) on the mini-board.
 - Pick a speed: **1×–5×**, **AFAP** (as fast as possible), or
-  **🧮 HEADLESS** — no rendering at all: the *entire* game (planner,
-  moves, spawn odds, undo re-rolls) runs as flat arrays inside the Web
-  Worker. The page just shows a live counter and an occasional board
-  snapshot, then installs the final position into the real game. Because
-  nothing depends on animation frames, it runs at full speed even in a
-  hidden background tab, where browsers throttle rendered modes to a
-  crawl.
+  **🧮 HEADLESS** — the renderer is fully off: the *entire* game
+  (planner, moves, spawn odds, undo re-rolls) runs as flat arrays
+  inside the Web Worker while the board sits dimmed and frozen. Only
+  the live counters move; the final position installs into the real
+  game at the end (or the moment you stop). Because nothing depends on
+  animation frames, it runs at full speed even in a hidden background
+  tab, where browsers throttle rendered modes to a crawl.
 - Pick a flavor:
   - **🎲 SUPER** — spawns stay honest (90% twos, random cells); every
     unlucky one gets undone and re-rolled. About 1.8 million undos per
@@ -40,7 +40,10 @@ the whole chain folds into **131072**, the highest tile 2048's rules allow.
     move by move, through the real engine in about a tenth of a second.
     The other three corners are the same lines mirrored. The ending
     still gets eyes on it: the finale replays on the real board in slow
-    motion and holds the pose.
+    motion and holds the pose. And if you'd rather *watch the whole
+    thing*, pick a rendered speed (1×–5× or AFAP) — the book plays out
+    on the visible grid move by move, zero undos, finale in slow
+    motion; 🧮 HEADLESS stays the instant default.
 - The finale always plays out in slow motion. It's the money shot.
 
 And a goal picker:
