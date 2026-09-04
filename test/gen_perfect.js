@@ -132,7 +132,7 @@ function H(b) {
   return acc;
 }
 
-function candidates(b, seen, depth) {
+function candidates(b, seen, depth, existsOnly) {
   if (depth === undefined) depth = 3;
   var z = -1;
   for (var zi = 0; zi < 16; zi++) if (b[S[zi]] === 0) { z = zi; break; }
@@ -207,11 +207,13 @@ function candidates(b, seen, depth) {
         if (depth > 1) {
           var empties = 0;
           for (var ei = 0; ei < 16; ei++) if (!nb[ei]) empties++;
-          if (empties <= 2 && candidates(nb, {}, depth - 1).length === 0) continue;
+          if (empties <= 2 &&
+              candidates(nb, {}, depth - 1, true).length === 0) continue;
         }
       }
       out.push({ dir: dir, cell: plants[pi], value: pvals[pvi],
                  nb: nb, key: key, h: H(nb) });
+      if (existsOnly) return out; // caller only needs viability
      }
     }
   }
@@ -221,7 +223,12 @@ function candidates(b, seen, depth) {
 
 function rescueDFS(b, seen, depth, floor, fuel) {
   if (fuel.n-- <= 0) return null;
-  var cands = candidates(b, seen);
+  // Cheap filters only inside the tree: the deep near-full lookahead
+  // on every explored node is a multiplicative bomb in 1-2-empty
+  // terrain (measured at 94% of all work). Committed states still get
+  // the full check — the greedy's own picks and, below, the ending of
+  // any rescue line before it is accepted.
+  var cands = candidates(b, seen, 1);
   for (var i = 0; i < Math.min(cands.length, 10); i++) {
     var c = cands[i];
     if (c.h > floor) return [c];
@@ -235,11 +242,28 @@ function rescueDFS(b, seen, depth, floor, fuel) {
   return null;
 }
 function rescue(b, maxDepth, floor) {
+  var bad = {};
   for (var d = 2; d <= maxDepth; d++) {
-    var fuel = { n: 60000 };
-    var r = rescueDFS(b, {}, d, floor, fuel);
-    if (r) return r;
-    if (fuel.n <= 0) return null;
+    for (var tries = 0; tries < 6; tries++) {
+      var fuel = { n: 60000 };
+      var r = rescueDFS(b, bad, d, floor, fuel);
+      if (!r) {
+        if (fuel.n <= 0) return null;
+        break; // depth exhausted, go deeper
+      }
+      // Validate the line's ending with the full trap check; a doomed
+      // ending gets banned and the search retried. Intermediate states
+      // need no check — a found line moves through them by definition.
+      var fin = r[r.length - 1];
+      var empt = 0;
+      for (var i = 0; i < 16; i++) if (!fin.nb[i]) empt++;
+      if (empt <= 2 && !targetDone(fin.nb) &&
+          candidates(fin.nb, {}, 3, true).length === 0) {
+        bad[fin.key] = true;
+        continue;
+      }
+      return r;
+    }
   }
   return null;
 }
