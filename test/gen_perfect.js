@@ -160,6 +160,17 @@ function candidates(b, seen, depth, existsOnly) {
   for (var zi = 0; zi < 16; zi++) if (b[S[zi]] === 0) { z = zi; break; }
   var tailRow = z < 0 ? 3 : (z / 4) | 0;
   var dirs = [HEADDIR[tailRow], ROWWARD, OPP[HEADDIR[tailRow]]];
+  // A 2-feed carry chain for 2^k needs k-1 staging cells, one more
+  // than a row holds for the top row's 32 — the assembly must use the
+  // L-shaped workspace at the turn, which takes an anti-rowward merge
+  // (the boundary tile carrying INTO the top row). Allowed only when
+  // the board is nearly full: everything else is pinned then, so the
+  // slide can only perform the boundary carry or get filtered.
+  if (PLANT === 2) {
+    var emptCnt = 0;
+    for (var ec = 0; ec < 16; ec++) if (!b[ec]) emptCnt++;
+    if (emptCnt <= 2) dirs.push(OPP[ROWWARD]);
+  }
   var out = [];
   for (var di = 0; di < dirs.length; di++) {
     var dir = dirs[di];
