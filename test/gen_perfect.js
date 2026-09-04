@@ -376,6 +376,7 @@ function generateBuild() {
   var maxLen = steps.length;
   var stalls = 0;
   var stallsSinceProgress = 0;
+  var progressMark = steps.length;
   while (!targetDone(b)) {
     if (CKPT && Date.now() - lastCkpt >= 15000) {
       lastCkpt = Date.now();
@@ -428,10 +429,15 @@ function generateBuild() {
     if (steps.length > maxLen) {
       maxLen = steps.length;
       backStep = 8; // new ground: the ladder resets
-      stallsSinceProgress = 0;
-      if (RELIEF.active) {
-        RELIEF.active = false;
-        if (VERBOSE) console.log("  relief valve closed at move " + steps.length);
+      // Only MEANINGFUL progress closes the valve and forgives stalls;
+      // a lap that creeps one move past the old frontier does not.
+      if (steps.length > progressMark + 200) {
+        progressMark = steps.length;
+        stallsSinceProgress = 0;
+        if (RELIEF.active) {
+          RELIEF.active = false;
+          if (VERBOSE) console.log("  relief valve closed at move " + steps.length);
+        }
       }
     }
     if (VERBOSE && Date.now() - lastReport >= 5000) {
