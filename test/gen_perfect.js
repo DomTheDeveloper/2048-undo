@@ -400,6 +400,10 @@ function generateBuild() {
         stallsSinceProgress++;
         if (stallsSinceProgress >= 12 && !RELIEF.active) {
           RELIEF.active = true;
+          // Families condemned under 2-only rules are often viable
+          // with 4s in the menu: stale bans would hold the door shut
+          // right as the valve opens it.
+          BANFAM = {};
           if (VERBOSE) console.log("  relief valve OPEN at move " + steps.length);
         }
         if (stalls > 2000) {
@@ -436,6 +440,7 @@ function generateBuild() {
         stallsSinceProgress = 0;
         if (RELIEF.active) {
           RELIEF.active = false;
+          BANFAM = {}; // the regime changed again; old verdicts are stale
           if (VERBOSE) console.log("  relief valve closed at move " + steps.length);
         }
       }
