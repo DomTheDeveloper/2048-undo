@@ -72,6 +72,10 @@ function squeeze(bm) {
 // geometry demands. The verifier reports the count: every 4 costs
 // exactly 4 points off the mass-only ceiling.
 var RELIEF = { active: false };
+// Even with the valve open, 4s are a last resort per decision: every
+// pick first exhausts pure-2 options, and only a would-stall reopens
+// the 4 menu for that single decision (ALLOW4 flips around the retry).
+var ALLOW4 = false;
 
 function chainDone(b) {
   for (var i = 0; i < 16; i++) {
@@ -205,7 +209,7 @@ function candidates(b, seen, depth, existsOnly) {
     if (PLANT === 2) {
       var bm = 0;
       for (var bmi = 0; bmi < 16; bmi++) bm += sim.board[bmi];
-      if (squeeze(bm) || RELIEF.active) pvals = [2, 4];
+      if (squeeze(bm) || (RELIEF.active && ALLOW4)) pvals = [2, 4];
     }
     for (var pi = 0; pi < plants.length; pi++) {
      for (var pvi = 0; pvi < pvals.length; pvi++) {
@@ -388,12 +392,23 @@ function generateBuild() {
       throw new Error("overran the ledger at " + steps.length + " moves");
     }
     var cur = H(b);
+    ALLOW4 = false;
     var cands = candidates(b, banned);
     var pick = null;
     if (cands.length && cands[0].h > cur) {
       pick = [cands[0]];
     } else {
       pick = rescue(b, 10, cur, banned);
+      if (!pick && RELIEF.active) {
+        ALLOW4 = true;
+        cands = candidates(b, banned);
+        if (cands.length && cands[0].h > cur) {
+          pick = [cands[0]];
+        } else {
+          pick = rescue(b, 10, cur, banned);
+        }
+        ALLOW4 = false;
+      }
       if (!pick && cands.length) pick = [cands[0]];
       if (!pick) {
         stalls++;
