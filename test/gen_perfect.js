@@ -138,6 +138,22 @@ function H(b) {
 // and branching at <=2 empties is tiny (1-4), so depth five is cheap.
 var TRAP_DEPTH = 5;
 
+// Stall families are banned with the in-flight smalls erased: a stall
+// board differs from its thousand siblings only by where the 2s and 4s
+// happen to sit, so an exact ban just reroutes into the next sibling.
+// The key is the big structure plus how full the board is; the ledger
+// keeps any surviving route exact, so over-banning can only reroute.
+var BANFAM = {};
+function familyKey(b) {
+  var out = new Array(16);
+  var empties = 0;
+  for (var i = 0; i < 16; i++) {
+    out[i] = b[i] >= 8 ? b[i] : 0;
+    if (!b[i]) empties++;
+  }
+  return out.join(",") + "|" + empties;
+}
+
 function candidates(b, seen, depth, existsOnly) {
   if (depth === undefined) depth = TRAP_DEPTH;
   var z = -1;
@@ -177,6 +193,9 @@ function candidates(b, seen, depth, existsOnly) {
       nb[plants[pi]] = pvals[pvi];
       var key = nb.join(",");
       if (seen[key]) continue;
+      // Banned stall families are dead ends — but the target itself
+      // can share a family with a death-squeeze trap, so it is exempt.
+      if (BANFAM[familyKey(nb)] && !targetDone(nb)) continue;
       // Once the 131072 exists, nothing may ever sit head-ward of it:
       // no smaller tile can merge its way past, so such boards are
       // unwinnable however long they stay mobile.
@@ -360,9 +379,9 @@ function generateBuild() {
           throw new Error("gave up after " + stalls + " stalls at move " +
             steps.length + " board=[" + b.join(",") + "]");
         }
-        banned[b.join(",")] = true;
+        BANFAM[familyKey(b)] = true;
         var pop = Math.min(backStep, steps.length);
-        backStep = Math.min(backStep * 2, 1024);
+        backStep = Math.min(backStep * 2, 2048);
         steps.length = steps.length - pop;
         b = replayBoard(steps);
         if (VERBOSE) {
