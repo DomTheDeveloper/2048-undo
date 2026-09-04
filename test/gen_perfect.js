@@ -132,8 +132,14 @@ function H(b) {
   return acc;
 }
 
+// How far ahead committed states are checked for full-board traps.
+// 2-feed terrain funnels into dead gapless rows up to four plies out
+// ([16,4,2,2] -> [2,16,4,4] -> [2,2,16,8] -> all children immobile),
+// and branching at <=2 empties is tiny (1-4), so depth five is cheap.
+var TRAP_DEPTH = 5;
+
 function candidates(b, seen, depth, existsOnly) {
-  if (depth === undefined) depth = 3;
+  if (depth === undefined) depth = TRAP_DEPTH;
   var z = -1;
   for (var zi = 0; zi < 16; zi++) if (b[S[zi]] === 0) { z = zi; break; }
   var tailRow = z < 0 ? 3 : (z / 4) | 0;
@@ -241,8 +247,8 @@ function rescueDFS(b, seen, depth, floor, fuel) {
   }
   return null;
 }
-function rescue(b, maxDepth, floor) {
-  var bad = {};
+function rescue(b, maxDepth, floor, banned) {
+  var bad = banned ? Object.create(banned) : {};
   for (var d = 2; d <= maxDepth; d++) {
     for (var tries = 0; tries < 6; tries++) {
       var fuel = { n: 60000 };
@@ -258,7 +264,7 @@ function rescue(b, maxDepth, floor) {
       var empt = 0;
       for (var i = 0; i < 16; i++) if (!fin.nb[i]) empt++;
       if (empt <= 2 && !targetDone(fin.nb) &&
-          candidates(fin.nb, {}, 3, true).length === 0) {
+          candidates(fin.nb, {}, TRAP_DEPTH, true).length === 0) {
         bad[fin.key] = true;
         continue;
       }
@@ -268,11 +274,30 @@ function rescue(b, maxDepth, floor) {
   return null;
 }
 
-function generateBuild() {
+function startBoard() {
   var b = [];
   for (var i = 0; i < 16; i++) b.push(0);
   b[S[0]] = PLANT;
   b[S[1]] = PLANT;
+  return b;
+}
+
+function replayBoard(steps) {
+  var b = startBoard();
+  for (var k = 0; k < steps.length; k++) {
+    var st = steps[k];
+    var sim = Super.simMove(b, st.dir);
+    if (!sim.moved || sim.board[st.cell] !== 0) {
+      throw new Error("replay broke at step " + k);
+    }
+    sim.board[st.cell] = st.value;
+    b = sim.board;
+  }
+  return b;
+}
+
+function generateBuild() {
+  var b = startBoard();
 
   var steps = [];
   var t0 = Date.now();
@@ -302,6 +327,15 @@ function generateBuild() {
   }
 
   var milestone = 0;
+  // The greedy is forward-only, so a region condemned by the trap
+  // check needs a way OUT, not just a refusal: on a stall, ban the
+  // exact board, retreat a doubling number of moves (the same ladder
+  // dynamics that make the game runner converge — mass growth means
+  // no cycles), and let the replay steer around the family.
+  var banned = {};
+  var backStep = 8;
+  var maxLen = steps.length;
+  var stalls = 0;
   while (!targetDone(b)) {
     if (CKPT && Date.now() - lastCkpt >= 15000) {
       lastCkpt = Date.now();
@@ -313,16 +347,29 @@ function generateBuild() {
       throw new Error("overran the ledger at " + steps.length + " moves");
     }
     var cur = H(b);
-    var cands = candidates(b, {});
+    var cands = candidates(b, banned);
     var pick = null;
     if (cands.length && cands[0].h > cur) {
       pick = [cands[0]];
     } else {
-      pick = rescue(b, 10, cur);
+      pick = rescue(b, 10, cur, banned);
       if (!pick && cands.length) pick = [cands[0]];
       if (!pick) {
-        throw new Error("stalled at move " + steps.length +
-          " board=[" + b.join(",") + "]");
+        stalls++;
+        if (stalls > 2000) {
+          throw new Error("gave up after " + stalls + " stalls at move " +
+            steps.length + " board=[" + b.join(",") + "]");
+        }
+        banned[b.join(",")] = true;
+        var pop = Math.min(backStep, steps.length);
+        backStep = Math.min(backStep * 2, 1024);
+        steps.length = steps.length - pop;
+        b = replayBoard(steps);
+        if (VERBOSE) {
+          console.log("  stall #" + stalls + ": banned a dead family, " +
+            "backtracked " + pop + " to move " + steps.length);
+        }
+        continue;
       }
     }
     for (var k = 0; k < pick.length; k++) {
@@ -332,6 +379,10 @@ function generateBuild() {
         milestone = steps.length;
         console.log("  131072 forms at move " + milestone);
       }
+    }
+    if (steps.length > maxLen) {
+      maxLen = steps.length;
+      backStep = 8; // new ground: the ladder resets
     }
     if (VERBOSE && Date.now() - lastReport >= 5000) {
       lastReport = Date.now();
