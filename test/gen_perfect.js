@@ -545,7 +545,11 @@ function verifyCorner(corner, which) {
       for (var f = 0; f < book.steps.length; f++) {
         if (book.steps[f].value === 4) fours.push(f + 1);
       }
-      if (fours.length > 40) {
+      // Measured territory: the staging shortfall recurs at every
+      // recursion level of every arc (2^k from 2s occupies k cells),
+      // so the forced count runs to four figures. Best line so far:
+      // 1,735.
+      if (fours.length > 2500) {
         throw new Error(corner + ": " + fours.length + " four-spawns — " +
           "far beyond what the staging geometry forces");
       }

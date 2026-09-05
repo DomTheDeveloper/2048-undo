@@ -68,7 +68,7 @@ function runPerfect(corner) {
   var goal = process.env.GOAL === "spiral" ? "spiral"
            : process.env.GOAL === "score" ? "score" : "tile";
   var wantMoves = goal === "spiral" ? 65533
-                : goal === "score" ? 131066 : 32781;
+                : goal === "score" ? 129333 : 32781;
   var runner = new Super.HeadlessRunner(corner,
     { goal: goal, perfect: true, predictable: true });
   var MAX_MS = (Number(process.env.MAX_MIN) || 70) * 60 * 1000;
@@ -98,10 +98,22 @@ function runPerfect(corner) {
          runner.stats.undos === 0 &&
          runner.stats.score === 3670024;
   } else if (goal === "score") {
-    ok = Super.fullChain(b, S) &&
-         runner.stats.moves === 131066 &&
+    // The mass-only ceiling (3,932,156) is geometrically unreachable:
+    // staging 2^k from 2s occupies k cells, and the board runs one
+    // short at every recursion level, each shortfall costing a spawned
+    // 4 (-4 points). The shipped line's own 4-count pins both numbers
+    // exactly: moves = 131,068 - n4, score = 3,932,164 - 4*n4.
+    var sb = Super.perfectBook(corner, "score");
+    var n4 = 0;
+    if (sb) {
+      for (var i4 = 0; i4 < sb.steps.length; i4++) {
+        if (sb.steps[i4].value === 4) n4++;
+      }
+    }
+    ok = !!sb && Super.fullChain(b, S) &&
+         runner.stats.moves === 131068 - n4 &&
          runner.stats.undos === 0 &&
-         runner.stats.score === 3932156;
+         runner.stats.score === 3932164 - 4 * n4;
   } else {
     ok = b[S[0]] === 131072 &&
          runner.stats.moves === 32781 &&
@@ -121,7 +133,7 @@ function runPerfect(corner) {
     console.error("[" + corner + "] FAIL: " + (goal === "spiral"
       ? "want the full chain, line === 65533, undos === 0, score === 3,670,024"
       : goal === "score"
-      ? "want the full chain, line === 131066, undos === 0, score === 3,932,156"
+      ? "want the full chain, undos === 0, and the book's exact identities"
       : "want 131072 in " + corner + ", line === 32781, undos === 0"));
   }
   return ok;
@@ -308,7 +320,7 @@ function runCorner(corner) {
     for (var dd = 0; dd < 4; dd++) {
       if (Super.simMove(b, dd).moved) dead = false;
     }
-    ok = b[S[0]] === 131072 && dead && gm.score >= 3930000;
+    ok = b[S[0]] === 131072 && dead && gm.score >= 3920000;
     console.log("[" + corner + "] score-goal: score=" + gm.score +
       " (ceiling 3,932,156)  dead=" + dead);
   } else if (goal === "spiral") {

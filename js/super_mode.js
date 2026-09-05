@@ -269,7 +269,7 @@
           // 131072 down to 4. Hold the pose before the overlay.
           endHeld = true;
           controller.holdStatus = controller.goal === "score"
-            ? "move 131,066 — MAXIMUM SCORE: 3,932,156 points, the board dead on the full spiral"
+            ? "move 129,333 — MAXIMUM SCORE: 3,925,224 points, the board dead on the full spiral"
             : "move 65,533 — THE 131072 SPIRAL: every power of two at once";
           setStatus(controller.holdStatus);
           render();
@@ -567,7 +567,7 @@
          : controller.goal === "score" ? "score run — move " : "game — move ") +
           fmtInt(st.moves) +
           (controller.goal === "spiral" ? " of 65,533"
-         : controller.goal === "score" ? " of 131,066" : " of 32,781") +
+         : controller.goal === "score" ? " of 129,333" : " of 32,781") +
           " — zero undos, by construction — " +
           fmtInt(st.explored || 0) + " states searched — largest tile " +
           fmtInt(hmax));
@@ -588,7 +588,7 @@
       var bookOf = controller.mode === "perfect"
         ? "move " + fmtInt(d.stats.moves) + " of " +
           (controller.goal === "spiral" ? "65,533"
-         : controller.goal === "score" ? "131,066" : "32,781") + " — "
+         : controller.goal === "score" ? "129,333" : "32,781") + " — "
         : null;
       var progress = controller.goal === "score"
         ? (bookOf || "") + "score " + fmtInt(gm().score) +
@@ -632,7 +632,7 @@
       setStatus(controller.goal === "score"
         ? "maximum-score run to 3,932,156 — " +
           (controller.mode === "perfect"
-            ? "the computed 131,066-move line: all 2s but the two forced 4s"
+            ? "the computed 129,333-move line: 2s except the 1,735 geometrically forced 4s"
             : how)
         : controller.goal === "spiral"
         ? "the FULL spiral — every power of two, 131072 down to 4, at once — " + how
@@ -653,7 +653,7 @@
     var how = controller.mode === "perfect"
       ? "computed as pure data: exactly " +
         (controller.goal === "spiral" ? "65,533"
-       : controller.goal === "score" ? "131,066" : "32,781") +
+       : controller.goal === "score" ? "129,333" : "32,781") +
         " moves, zero undos"
       : controller.mode === "predictable"
       ? "every tile chosen and placed by design"

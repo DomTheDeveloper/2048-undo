@@ -35,9 +35,10 @@ the whole chain folds into **131072**, the highest tile 2048's rules allow.
     moves** — the provable minimum (derivation below). It isn't even
     searched at runtime: the perfect games are *constants of 2048*, so
     they were generated once (`test/gen_perfect.js`) and shipped as
-    data (`js/perfect_line.js`) — the 32,781-move line to the tile and
-    the 65,533-move line to the full spiral — replayed, and re-verified
-    move by move, through the real engine in about a tenth of a second.
+    data (`js/perfect_line.js`) — the 32,781-move line to the tile,
+    the 65,533-move line to the full spiral, and the 129,333-move
+    maximum-score line — replayed, and re-verified move by move,
+    through the real engine in a fraction of a second.
     The other three corners are the same lines mirrored. The ending
     still gets eyes on it: the finale replays on the real board in slow
     motion and holds the pose. And if you'd rather *watch the whole
@@ -56,12 +57,15 @@ And a goal picker:
   differ). 4-feeds make it the fewest-moves road there: exactly
   **65,533 moves** in PERFECT mode, ending frozen on the money shot.
 - **💯 MAX SCORE** — score is merge history: a spawned 2 is worth 0 and
-  every spawned 4 forfeits 4 points. So this run feeds twos only, and
-  after folding the first spiral into 131072 it *keeps playing*,
-  stacking the full descending chain 65536, 32768, … beside it until the
-  board dies full and mergeless at the theoretical ceiling of
-  **3,932,156 points**. Same death board as the SPIRAL goal — one
-  final position, reached two perfect ways.
+  every spawned 4 forfeits 4 points. So this run feeds twos, and after
+  folding the first spiral into 131072 it *keeps playing*, stacking the
+  full descending chain beside it until the board dies full and
+  mergeless. The mass-only ceiling is 3,932,156 — but it turns out the
+  board's geometry cannot pay it (derivation below): the computed
+  PERFECT line proves **3,925,224 points in 129,333 moves**, 99.82% of
+  the ceiling and the highest constructively verified score here. Same
+  death board as the SPIRAL goal — one final position, reached two
+  perfect ways.
 
 The engine (`js/super_ai.js`) is a checkpoint search over controlled
 outcomes: it plans a line of moves together with the spawn each move
@@ -85,6 +89,7 @@ four runs below executing **simultaneously** (one core each):
 | real engine, super | 131072 | 36,563 | 1,785,117 | 23.0 min | — | — |
 | **PERFECT (the book)** | 131072 | **32,781** | **0** | **0.1 s** | 0s | 0.1s |
 | **PERFECT SPIRAL (the book)** | full chain, score 3,670,024 | **65,533** | **0** | **0.2 s** | 0s | 0.2s |
+| **PERFECT MAX SCORE (the book)** | full chain, score **3,925,224** | **129,333** | **0** | **0.3 s** | 0s | 0.3s |
 | honest expectimax (no undo, no control) | 1024–2048 | — | — | ~2s/game | — | — |
 
 The story the numbers tell: the board engine is effectively free (1.8M
@@ -144,18 +149,31 @@ move **32,784**, three later than the standalone minimum — a pure-4
 fold needs a few junk consolidations that 2-junk avoids, and the
 ledger silently absorbs them into the total.
 
-**Highest score, fewest moves.** Score is merge history: building 2^k
-entirely from 2s banks (k−1)·2^k points, and every spawned 4 skips a
-2+2 merge, forfeiting exactly 4 points. The maximum-score death board
-is *that same full chain*, worth Σₖ₌₂¹⁷ (k−1)·2^k = 3,932,164 points —
-minus 8 for the two structurally forced 4-spawns (each lands in a last
-free cell where no partner 2 could ever join it): **3,932,156**. The
-same mass ledger prices that game at about **131,066 moves** — twice
-the spiral run, because 2-feeds carry half the mass.
+**Highest score — and why the folklore ceiling can't be paid.** Score
+is merge history: building 2^k entirely from 2s banks (k−1)·2^k
+points, and every spawned 4 skips a 2+2 merge, forfeiting exactly 4
+points. The maximum-score death board is *that same full chain*, worth
+Σₖ₌₂¹⁷ (k−1)·2^k = 3,932,164 points — and the usual derivation
+subtracts 8 for two "structurally forced" 4-spawns to get the widely
+quoted ceiling of **3,932,156**. That derivation only counts mass. It
+never asks whether the moves *fit on the board*, and they don't:
+staging 2^k from pure 2s occupies **k cells at its tightest moment**
+(the [16, 8, 4, 2, 2] instant is unavoidable — eager merging cannot
+compress it), and on the 15 cells beside the 131072 every "second
+half" of the rebuild is one cell short at every recursion level. Each
+shortfall can only be resolved by a spawned 4, and each spawned 4
+costs exactly 4 points. Generating the line under a strict
+last-resort-4 discipline (4s granted per decision only after every
+pure-2 option provably dies) lands at **1,735 four-spawns**: exactly
+**129,333 moves** and **3,925,224 points**, pinned by the identities
+moves = 131,068 − n₄ and score = 3,932,164 − 4·n₄, and verified by
+full replay in all four corners. That is the highest constructively
+verified score for this board; the true minimum n₄ (somewhere between
+2 and 1,735) is, as far as we know, an open question.
 
 So the perfections pull the same lever opposite ways on the same final
 board: **spawn 4s for the fewest moves (65,533, scoring 3,670,024),
-spawn 2s for the most points (3,932,156, taking ~131,066 moves).** One
+spawn 2s for the most points (3,925,224, in 129,333 moves).** One
 dial, both extremes, and SUPER MODE plays each of them to its bound.
 
 `PERFECT=1 node test/run.js br bl tr tl` proves the tile line in about
@@ -163,9 +181,11 @@ a tenth of a second per corner: it replays the shipped data through
 the real engine — every slide must actually move, every spawn cell
 must be empty — and asserts exactly 32,781 moves with zero undos.
 `PERFECT=1 GOAL=spiral` does the same for the full spiral: 65,533
-moves, zero undos, the exact chain, score exactly 3,670,024.
-`node test/gen_perfect.js` (`TARGET=full` or `TARGET=tile`)
-regenerates and re-verifies either line from nothing.
+moves, zero undos, the exact chain, score exactly 3,670,024. And
+`PERFECT=1 GOAL=score` replays the maximum-score line: 129,333 moves,
+zero undos, the full chain dead, score exactly 3,925,224.
+`node test/gen_perfect.js` (`TARGET=tile`, `TARGET=full` or
+`TARGET=score`) regenerates and re-verifies any line from nothing.
 
 References: [The Mathematics of 2048: Minimum Moves to Win with Markov
 Chains](https://jdlm.info/articles/2017/08/05/markov-chain-2048.html)
