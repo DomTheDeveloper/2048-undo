@@ -4,7 +4,9 @@
 //
 // Loads the real grid/tile/game_manager engine, drives it with SuperDriver
 // (real moves, real undo re-rolls, real 90/10 spawn odds) and asserts the
-// board ends with the 131072 tile in the chosen corner.
+// board ends with the 131072 tile in the chosen corner. Every flavor
+// plays the shipped line when one exists for the goal; NOBOOK=1 makes
+// the planner search the whole game instead (about 23 minutes a corner).
 
 "use strict";
 
@@ -150,6 +152,7 @@ function runCorner(corner) {
   var driver = new Super.SuperDriver(gm, corner, game.Tile,
     { verify: true, trace: process.env.TRACE === "1",
       predictable: process.env.PREDICTABLE === "1",
+      noBook: process.env.NOBOOK === "1",
       goal: goal });
   driver.attach();
 
@@ -260,7 +263,7 @@ function runCorner(corner) {
     }
     if (ev.type === "accepted") {
       lastPhase = ev.phase;
-      if (ev.phase === "primed") finaleSpawnedFour = true;
+      if (ev.phase === "primed" || ev.phase === "finale") finaleSpawnedFour = true;
       var m = driver.stats.moves;
       if (m - lastLog >= 500) {
         lastLog = m;

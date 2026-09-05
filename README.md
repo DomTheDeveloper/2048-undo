@@ -21,12 +21,17 @@ the whole chain folds into **131072**, the highest tile 2048's rules allow.
   game at the end (or the moment you stop). Because nothing depends on
   animation frames, it runs at full speed even in a hidden background
   tab, where browsers throttle rendered modes to a crawl.
-- Pick a flavor:
+- Pick a flavor. All three play the *same computed lines* (the books,
+  below); they differ in how the spawns are made to match.
   - **🎲 SUPER** — spawns stay honest (90% twos, random cells); every
-    unlucky one gets undone and re-rolled. About 1.8 million undos per
-    perfect game.
+    unlucky one gets undone and re-rolled — the opening pair included
+    (two 4s seated in the corner is a one-in-twelve-thousand deal, so
+    the run restarts about 12,000 times before its first move). Exactly
+    32,781 moves and about 1.9 million undos per perfect game, every
+    one of them counted.
   - **🔮 PREDICTABLE** — the AI decides which tile comes next *and where
-    it lands*. Zero undos, zero luck.
+    it lands*: the line's spawn, placed. Exactly 32,781 moves, zero
+    undos, zero luck.
   - **👑 PERFECT** — the move-minimal game, *computed rather than
     played*: it always runs as pure matrix data (no rendering — the
     board dims and holds still until the finished position lands), the
@@ -67,36 +72,53 @@ And a goal picker:
   death board as the SPIRAL goal — one final position, reached two
   perfect ways.
 
-The engine (`js/super_ai.js`) is a checkpoint search over controlled
-outcomes: it plans a line of moves together with the spawn each move
-needs, then either re-rolls reality until it matches (super) or simply
-places the planned tile (predictable). Every state on screen is a real,
-legal game state reached by real moves. All searching runs in a Web
-Worker (`js/super_worker.js`), one line prefetched ahead, so the page
-stays at 60fps even while the planner thinks hard.
+The engine (`js/super_ai.js`) plans a line of moves together with the
+spawn each move needs, then either re-rolls reality until it matches
+(super) or simply places the planned tile (predictable). Since the
+perfect games are shipped as data, the line normally *is* the book —
+served in 2,000-move chunks and re-verified against the real game move
+by move — and the checkpoint search over controlled outcomes underneath
+only wakes up for a board that isn't on it (or when no line is shipped
+for the goal; `NOBOOK=1` in the harness forces that, the pre-book
+behaviour). Every state on screen is a real, legal game state reached
+by real moves. All planning runs in a Web Worker
+(`js/super_worker.js`), one chunk prefetched ahead, so the page stays
+at 60fps.
 
 `node test/run.js [corner]` drives the same engine headless as proof
-(`PREDICTABLE=1` for controlled spawns, `GOAL=score` for the max-score
-run), and `node test/bench.js {standard|undo|perfect}` is a pure-array
-speed benchmark of the three rulesets. Measured on one 4-core box, all
-four runs below executing **simultaneously** (one core each):
+(`PREDICTABLE=1` for controlled spawns, `GOAL=spiral|score` for the
+other goals, `NOBOOK=1` to make the planner search the whole game), and
+`node test/bench.js {standard|undo|perfect}` is a pure-array speed
+benchmark of the three rulesets, searched. The searched rows below were
+measured on one 4-core box, all four executing **simultaneously** (one
+core each); the book rows are the same harness with the shipped lines:
 
 | run | result | moves | undo re-rolls | wall time | planning | engine |
 |---|---|---|---|---|---|---|
-| bench, undo rules | 131072 | 36,561 | 1,798,095 | 22.9 min | 1376.1s | 0.1s |
-| bench, perfect rules | 131072 | 36,569 | 0 | 22.7 min | 1364.6s | 0.0s |
-| real engine, predictable | 131072 | 36,561 | 0 | 23.0 min | — | — |
-| real engine, super | 131072 | 36,563 | 1,785,117 | 23.0 min | — | — |
+| bench, undo rules (searched) | 131072 | 36,561 | 1,798,095 | 22.9 min | 1376.1s | 0.1s |
+| bench, perfect rules (searched) | 131072 | 36,569 | 0 | 22.7 min | 1364.6s | 0.0s |
+| real engine, predictable (searched) | 131072 | 36,561 | 0 | 23.0 min | — | — |
+| real engine, super (searched) | 131072 | 36,563 | 1,785,117 | 23.0 min | — | — |
+| **real engine, predictable (the book)** | 131072 | **32,781** | **0** | **0.2 s** | 0s | 0.2s |
+| **real engine, super (the book)** | 131072 | **32,781** | **1,912,116** | **7.9 s** | 0s | 7.9s |
+| **real engine, super, max score (the book)** | full chain, score **3,925,224** | **129,333** | 662,805 | 4.0 s | 0s | 4.0s |
 | **PERFECT (the book)** | 131072 | **32,781** | **0** | **0.1 s** | 0s | 0.1s |
 | **PERFECT SPIRAL (the book)** | full chain, score 3,670,024 | **65,533** | **0** | **0.2 s** | 0s | 0.2s |
 | **PERFECT MAX SCORE (the book)** | full chain, score **3,925,224** | **129,333** | **0** | **0.3 s** | 0s | 0.3s |
 | honest expectimax (no undo, no control) | 1024–2048 | — | — | ~2s/game | — | — |
 
 The story the numbers tell: the board engine is effectively free (1.8M
-re-rolls cost 0.1s — about 18 million engine steps per second); ~99.99%
-of the time is the planner thinking. That's also why the undo and
-perfect rulesets finish in a dead heat, and why an honest game — no
-undo, no control — tops out around 2048: perfection needs the re-roll.
+re-rolls cost 0.1s in flat arrays — about 18 million engine steps per
+second — and 7.9s through the real GameManager with its tile objects
+and undo stack); searched, ~99.99% of the time is the planner thinking,
+which is why the undo and perfect rulesets finish in a dead heat, and
+why an honest game — no undo, no control — tops out around 2048:
+perfection needs the re-roll. With the books the planner is gone and
+every flavor is engine-bound. In the browser that means 🧮 HEADLESS
+finishes any flavor in about a tenth of a second (≈230,000 moves/s for
+the tile line inside the worker), and a rendered AFAP run is bound by
+the real game plus one paint per frame, ≈2,000 moves/s: 16 s for the
+32,781-move line, 23 s for SUPER with its 1.9 million undos.
 
 ### 👑 The mathematics of a perfect game
 
@@ -133,10 +155,11 @@ The same formula gives **519** for the 2048 tile (510 + 9) — exactly
 the known minimum from Lees-Miller's Markov-chain analysis of 2048,
 which also puts honest random play at ~939 moves on average. Every 2
 that sneaks into a build costs half a move (a pair of 2s is one extra
-move), which is why plain PREDICTABLE runs land ~36,900: they allow 2s
-whenever convenient, roughly 8,200 of them. PERFECT allows none — and
-because a lone 2 could never merge again in an all-4 world, even the
-two starting tiles must be 4s.
+move), which is why the planner's own searched lines land ~36,500 (the
+searched rows above): they allow 2s whenever convenient, roughly 8,200
+of them. The books allow none — and because a lone 2 could never merge
+again in an all-4 world, even the two starting tiles must be 4s (which
+is exactly why SUPER has to re-roll its opening).
 
 **The full spiral, fewest moves.** The complete chain — 131072,
 65536, … 4, one power per cell — has mass 2^18 − 4 = 262,140, so an

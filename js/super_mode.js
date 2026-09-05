@@ -375,8 +375,6 @@
     } catch (e) { controller.worker = null; }
 
     controller.aiActing = true;
-    g.undoStack.length = 0;        // a fresh run keeps its own history
-    g.restart();
     controller.driver = new Super.SuperDriver(g, controller.corner, Tile, {
       predictable: controller.mode !== "super",
       perfect: controller.mode === "perfect",
@@ -388,7 +386,13 @@
         }
       }
     });
+    // Attach before the restart: the opening pair then comes through
+    // the driver's spawner too — seated on the line for PERFECT and
+    // PREDICTABLE, honest random for SUPER (its first step re-rolls
+    // that opening onto the line like any other spawn).
     controller.driver.attach();
+    g.undoStack.length = 0;        // a fresh run keeps its own history
+    g.restart();
     controller.aiActing = false;
 
     document.body.classList.add("super-running");
@@ -527,6 +531,19 @@
     return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   }
 
+  // Every flavor plays the shipped line for its goal when the page has
+  // it; the lengths are exact by the mass ledger.
+  function lineMoves() {
+    return controller.goal === "spiral" ? "65,533"
+         : controller.goal === "score" ? "129,333" : "32,781";
+  }
+
+  function onBook() {
+    try {
+      return !!Super.hasBook(Super.bookFor(controller.goal));
+    } catch (e) { return false; }
+  }
+
   function updateHud(justWon) {
     var d = controller.driver;
     var hs = controller.headless;
@@ -576,6 +593,7 @@
           ? " at " + fmtInt(Math.round(st.moves / (hs.elapsed / 1000))) + " moves/s"
           : "";
         setStatus("headless — pure data, no rendering" + mps +
+          (onBook() ? " — move " + fmtInt(st.moves) + " of " + lineMoves() : "") +
           " — largest tile " + fmtInt(hmax) +
           (controller.goal === "score"
             ? " — score " + fmtInt(st.score) + " / 3,932,156"
@@ -585,10 +603,8 @@
       var thinking = controller.plannerBusySince &&
         Date.now() - controller.plannerBusySince > 400;
       var max = Super.maxTile(d.readBoard());
-      var bookOf = controller.mode === "perfect"
-        ? "move " + fmtInt(d.stats.moves) + " of " +
-          (controller.goal === "spiral" ? "65,533"
-         : controller.goal === "score" ? "129,333" : "32,781") + " — "
+      var bookOf = controller.mode === "perfect" || onBook()
+        ? "move " + fmtInt(d.stats.moves) + " of " + lineMoves() + " — "
         : null;
       var progress = controller.goal === "score"
         ? (bookOf || "") + "score " + fmtInt(gm().score) +
@@ -597,7 +613,8 @@
         ? (bookOf || "building the FULL spiral — ") + "largest tile " + fmtInt(max)
         : (bookOf || "building the spiral — ") + "largest tile " + fmtInt(max);
       setStatus((thinking ? "thinking… — " : "") + progress +
-        (controller.mode === "predictable" ? " (spawns by design)" : ""));
+        (controller.mode === "predictable" ? " (spawns by design)"
+       : controller.mode === "super" ? " (honest spawns, re-rolled)" : ""));
     }
   }
 
@@ -623,12 +640,14 @@
       el.classList.toggle("disabled", controller.running);
     });
     if (!controller.running && !controller.done) {
+      var line = onBook() ? "the computed " + lineMoves() + "-move line, " : "";
       var how = controller.mode === "perfect"
         ? "all-4 feeding: the mathematical minimum of " +
           (controller.goal === "spiral" ? "65,533" : "32,781") + " moves"
         : controller.mode === "predictable"
-        ? "it decides every next tile and where it lands"
-        : "undoing every unlucky spawn along the way";
+        ? line + "every next tile placed by design — zero undos"
+        : line + "played with honest spawns — every unlucky one undone, " +
+          "the opening pair included";
       setStatus(controller.goal === "score"
         ? "maximum-score run to 3,932,156 — " +
           (controller.mode === "perfect"
@@ -650,14 +669,16 @@
     var st = controller.driver ? controller.driver.stats
                                : controller.headless.stats;
     var el = $(".super-win");
+    var exact = onBook() ? "exactly " + lineMoves() + " moves"
+                         : fmtInt(st.moves) + " moves";
     var how = controller.mode === "perfect"
-      ? "computed as pure data: exactly " +
-        (controller.goal === "spiral" ? "65,533"
-       : controller.goal === "score" ? "129,333" : "32,781") +
-        " moves, zero undos"
+      ? (controller.speed === "headless" ? "computed as pure data: "
+                                          : "played from the book: ") +
+        exact + ", zero undos"
       : controller.mode === "predictable"
-      ? "every tile chosen and placed by design"
-      : "capped off by a spawned&nbsp;4";
+      ? "every tile placed by design: " + exact + ", zero undos"
+      : "honest spawns, every unlucky one undone: " + exact + ", " +
+        fmtInt(st.undos) + " undos";
     if (controller.mode !== "perfect" && controller.speed === "headless") {
       how += ", all as pure matrix data";
     }
@@ -665,15 +686,16 @@
       $(".super-win h2").textContent = fmtInt(gm().score);
       $(".super-win-sub").innerHTML =
         "Maximum-score run complete — 131072 plus the full descending " +
-        "chain, " + how + ".<br>The board is dead. Gloriously.";
+        "chain; " + how + ".<br>The board is dead. Gloriously.";
     } else if (controller.goal === "spiral") {
       $(".super-win h2").textContent = "131072";
       $(".super-win-sub").innerHTML =
         "THE FULL SPIRAL — every power of two from 131072 down to 4, " +
-        "one per cell, " + how + ".<br>The board is dead. Perfectly.";
+        "one per cell; " + how + ".<br>The board is dead. Perfectly.";
     } else {
       $(".super-win h2").textContent = "131072";
-      $(".super-win-sub").innerHTML = "Perfect spiral complete — " + how +
+      $(".super-win-sub").innerHTML =
+        "Perfect spiral complete, capped off by a spawned&nbsp;4 — " + how +
         ".<br>The highest tile 2048 allows.";
     }
     $(".super-win-moves").textContent = fmtInt(st.moves);

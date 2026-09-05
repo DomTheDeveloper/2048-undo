@@ -578,7 +578,7 @@ console.log("  target reached, ledger exact" +
 var line;
 if (TARGET === "tile") {
   console.log("folding (engine's proven 15-move collapse)...");
-  var ai = new Super.SuperAI(CORNER, { goal: "tile" });
+  var ai = new Super.SuperAI(CORNER, { goal: "tile", noBook: true });
   var fold = ai.plan(build.board);
   if (fold.type !== "line" || fold.phase !== "finale") {
     throw new Error("fold plan came back " + fold.type + "/" + fold.phase);

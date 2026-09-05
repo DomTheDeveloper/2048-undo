@@ -686,13 +686,31 @@
   //
   // Codec: two hex chars per step; bits 0-1 dir, 2-5 cell, 6 value
   // (0 = spawn 4, 1 = spawn 2 — 2s appear only in the fold's junk).
-  function decodePerfectLine(which) {
+  function bookData() {
     var data = null;
     if (typeof module !== "undefined" && typeof require === "function") {
       try { data = require("./perfect_line.js"); } catch (e) {}
     }
     if (!data && typeof PERFECT_LINE !== "undefined") data = PERFECT_LINE;
     if (!data && global && global.PERFECT_LINE) data = global.PERFECT_LINE;
+    return data || null;
+  }
+
+  // Which shipped line a goal plays: "tile" (32,781 to the 131072),
+  // "full" (65,533 to the complete spiral), "score" (129,333 to the
+  // maximum score).
+  function bookFor(goal) {
+    return goal === "spiral" ? "full" : goal === "score" ? "score" : "tile";
+  }
+
+  function hasBook(which) {
+    var d = bookData();
+    if (!d) return false;
+    return !!(which === "full" ? d.full : which === "score" ? d.score : d.hex);
+  }
+
+  function decodePerfectLine(which) {
+    var data = bookData();
     if (!data) return null;
     // "tile" = the 32,781-move line to the 131072 tile; "full" = the
     // 65,533-move line to the complete spiral; "score" = the same
@@ -781,9 +799,10 @@
     // Perfect: the game as a computed constant, one shipped line per
     // goal. Mass is conserved by slides and grows only by spawns, so
     // each line's length is exact by construction: 32,781 to the tile
-    // and 65,533 to the full spiral (all-4 feeding), 131,066 for the
-    // maximum score (all-2 feeding, two forced 4-spawns, 3,932,156
-    // points). The same ledger gives the known 519 for the 2048 tile.
+    // and 65,533 to the full spiral (all-4 feeding), 129,333 for the
+    // maximum score (all-2 feeding except the 1,735 geometrically
+    // forced 4-spawns, 3,925,224 points). The same ledger gives the
+    // known 519 for the 2048 tile.
     this.perfect = !!(opts && opts.perfect);
     this.S = snakeCells(corner);
     // The second act is a fresh sprint on the 15 cells the 131072
@@ -794,9 +813,10 @@
     this.certMemo = {};
     this.deadEnds = {};
     this.planFail = {};
-    // The perfect book: loaded on the first perfect plan; false means
-    // the data file isn't shipped and search has to do the work.
-    this.book = null;
+    // The perfect book: loaded on the first plan; false means the data
+    // file isn't shipped (or noBook asked for a searched game) and
+    // search has to do the work.
+    this.book = opts && opts.noBook ? false : null;
     this.bookPos = 0;
     this.bookKey = "";
   }
@@ -888,9 +908,7 @@
   SuperAI.prototype.bookPlan = function (board) {
     if (this.book === false) return null;
     if (this.book === null) {
-      this.book = perfectBook(this.corner,
-                              this.goal === "spiral" ? "full"
-                            : this.goal === "score" ? "score" : "tile") || false;
+      this.book = perfectBook(this.corner, bookFor(this.goal)) || false;
       if (!this.book) return null;
       this.bookPos = 0;
       this.bookKey = this.book.start.join(",");
@@ -952,13 +970,13 @@
       }
     }
 
-    // Perfect: play the book. The computed line covers the whole game
-    // (build and fold); search below is only the fallback for boards
-    // that aren't on it.
-    if (this.perfect) {
-      var bp = this.bookPlan(board);
-      if (bp) return bp;
-    }
+    // Play the book whenever one exists for the goal — every flavor.
+    // PERFECT computes it, PREDICTABLE places its spawns, SUPER
+    // re-rolls honest luck until each spawn matches it; the search
+    // below is the fallback for boards that aren't on the line (and
+    // the whole engine when no line is shipped).
+    var bp = this.bookPlan(board);
+    if (bp) return bp;
 
     // Finale: the fold only ever starts from ONE board — the primed
     // spiral the build is defined to deliver (65536 ... 4 down the
@@ -1060,6 +1078,7 @@
     this.pendingSpawn = null;
     this.injectedPlan = null;
     this.attached = false;
+    this.openingDone = false;
     this.history = [];
   }
 
@@ -1104,7 +1123,8 @@
       }
       var cells = this.grid.availableCells();
       if (!cells.length) return;
-      if (self.ai.perfect) {
+      if (self.ai.perfect ||
+          (self.options.predictable && hasBook(bookFor(self.ai.goal)))) {
         // Canonical fallback: the book line is defined from the two
         // starting tiles seated at the head of the snake (2s for the
         // score line, 4s for the move-minimal ones — a stray 2 in an
@@ -1142,8 +1162,39 @@
   }
 
   // One attempt. Returns {type: "accepted"|"rejected"|"retry"|"done"|"stuck", ...}
+  // SUPER's spawns stay honest — the opening ones included. When a
+  // book exists, the undo trick applies to the very first two tiles as
+  // well: restart until the honest random opening lands on the line's
+  // canonical start (about one in twelve thousand for two 4s in the
+  // corner; the re-rolls are counted like any other).
+  SuperDriver.prototype.rerollOpening = function () {
+    var gm = this.gm;
+    var S = this.ai.S;
+    var sv = this.ai.goal === "score" ? 2 : 4;
+    var want = new Array(CELLS);
+    for (var i = 0; i < CELLS; i++) want[i] = 0;
+    want[S[0]] = sv;
+    want[S[1]] = sv;
+    var tries = 0;
+    while (!boardsEqual(this.readBoard(), want) && tries < 400000) {
+      gm.restart();
+      tries++;
+    }
+    this.stats.undos += tries;
+    this.stats.attempts += tries;
+    this.stats.openingRerolls = (this.stats.openingRerolls || 0) + tries;
+    return boardsEqual(this.readBoard(), want);
+  };
+
   SuperDriver.prototype.step = function () {
     var gm = this.gm;
+    if (!this.openingDone) {
+      this.openingDone = true;
+      if (!this.ai.perfect && !this.options.predictable &&
+          this.stats.moves === 0 && hasBook(bookFor(this.ai.goal))) {
+        this.rerollOpening();
+      }
+    }
     var board = this.readBoard();
     var goalMet = this.ai.goal === "score"
       ? (boardDead(board) && maxTile(board) >= 131072)
@@ -1188,10 +1239,12 @@
       if (plan.type === "stuck") {
         this.lastStuck = { board: board, reason: plan.reason };
         if (gm.undoStack.length === 0) {
-          // Nothing left to unwind: start over.
+          // Nothing left to unwind: start over (a fresh honest opening
+          // gets re-rolled onto the line again next step).
           this.unwinding = false;
           gm.restart();
           this.stats.restarts++;
+          this.openingDone = false;
           return { type: "restart" };
         }
         var back;
@@ -1342,7 +1395,8 @@
     options = options || {};
     this.S = snakeCells(corner);
     this.ai = new SuperAI(corner, { goal: options.goal,
-                                    perfect: options.perfect });
+                                    perfect: options.perfect,
+                                    noBook: options.noBook });
     this.goal = this.ai.goal;
     // Perfect play is forward-only by definition; it never pays the
     // undo trick because it never needs it.
@@ -1363,13 +1417,26 @@
   HeadlessRunner.prototype.freshBoard = function () {
     var b = [];
     for (var i = 0; i < CELLS; i++) b.push(0);
-    if (this.ai.perfect) {
+    if (this.ai.perfect || hasBook(bookFor(this.goal))) {
       // Canonical start: the book line is defined from exactly this
       // board — two tiles seated at the head of the snake (2s for the
-      // score line, 4s for the move-minimal ones).
+      // score line, 4s for the move-minimal ones). PERFECT and
+      // PREDICTABLE place them; SUPER re-rolls honest openings until
+      // one lands there, sampled exactly (geometric in the odds: two
+      // specific cells out of 16 and 15, both the wanted value) and
+      // counted like every other re-roll.
       var sv = this.goal === "score" ? 2 : 4;
       b[this.S[0]] = sv;
       b[this.S[1]] = sv;
+      if (!this.ai.perfect && !this.predictable) {
+        var pv = sv === 4 ? 0.1 : 0.9;
+        var p = 2 * (1 / 16) * (1 / 15) * pv * pv;
+        var k = Math.ceil(Math.log(1 - Math.random()) / Math.log(1 - p));
+        var rerolls = Math.max(0, k - 1);
+        this.stats.undos += rerolls;
+        this.stats.attempts += rerolls;
+        this.stats.openingRerolls = (this.stats.openingRerolls || 0) + rerolls;
+      }
     } else {
       this.spawnRandom(b);
       this.spawnRandom(b);
@@ -1496,6 +1563,8 @@
     maxTile: maxTile,
     debugChildren: debugChildren,
     perfectBook: perfectBook,
+    hasBook: hasBook,
+    bookFor: bookFor,
     fullChain: fullChain
   };
 

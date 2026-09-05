@@ -59,7 +59,9 @@ function maxTile(b) {
 // ------------------------------------------------------------------
 
 function runControlled(name, place) {
-  var ai = new Super.SuperAI(CORNER, { goal: GOAL });
+  // The bench times the planner, so it searches the whole game rather
+  // than replaying the shipped line.
+  var ai = new Super.SuperAI(CORNER, { goal: GOAL, noBook: true });
   var S = Super.snakeCells(CORNER);
   var b = freshBoard();
   var hist = [];
