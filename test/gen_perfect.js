@@ -413,7 +413,12 @@ function generateBuild() {
       if (!pick) {
         stalls++;
         stallsSinceProgress++;
-        if (stallsSinceProgress >= 12 && !RELIEF.active) {
+        // The endgame's pinches come every few hundred moves: deep
+        // retreats would undo several solved ones per stall, and the
+        // valve must answer faster than the 12-stall patience of the
+        // open midgame.
+        var nearEnd = TARGET_MOVES - steps.length < 3000;
+        if (stallsSinceProgress >= (nearEnd ? 4 : 12) && !RELIEF.active) {
           RELIEF.active = true;
           // Families condemned under 2-only rules are often viable
           // with 4s in the menu: stale bans would hold the door shut
@@ -427,7 +432,7 @@ function generateBuild() {
         }
         BANFAM[familyKey(b)] = true;
         var pop = Math.min(backStep, steps.length);
-        backStep = Math.min(backStep * 2, 2048);
+        backStep = Math.min(backStep * 2, nearEnd ? 256 : 2048);
         steps.length = steps.length - pop;
         b = replayBoard(steps);
         if (VERBOSE) {
