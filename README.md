@@ -57,13 +57,12 @@ above the board decide what kind of game that is:
 - **FINALE** (perfect play) — **🎬 SLOW MOTION** plays the ending at a
   readable pace and holds the pose on the finished spiral;
   **⚡ HYPERCOMPLETE** just finishes.
-- The mini-board picks the corner for the biggest tile — and which way
-  the spiral runs out of it: from bottom-right, **⬅ LEFT** (65536
-  beside the 131072, the snake along the rows) or **⬆ UP** (65536 above
-  it, along the columns). The snake is drawn on the mini-board, and
-  clicking the chosen corner again flips it. Eight spirals, all exact:
-  the shipped lines are one line and the seven symmetries of the
-  square (`ORIENT=col` in the harness picks the column-first ones).
+- Two pickers: the **corner** grid says where the biggest tile lives,
+  and the **spiral** grids draw both snakes out of that corner — along
+  its row (65536 beside the 131072) or along its column (65536 above or
+  below it) — so you click the shape you want. Eight spirals, all
+  exact: the shipped lines are one line and the seven symmetries of
+  the square (`ORIENT=col` in the harness picks the column-first ones).
 - **Try again** above the board restarts at any time, and the game-over
   screen has a **Close** button that leaves the dead board on show (Z
   still takes moves back).

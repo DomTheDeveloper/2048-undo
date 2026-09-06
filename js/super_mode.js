@@ -13,6 +13,7 @@
 
   var Super = window.Super2048;
   var BASE_MPS = 8; // moves per second at 1x
+  var BUILD = "3";  // bump with index.html's ?v= so browsers refetch the scripts
 
   var TILES = ["evil", "regular", "perfect"];
   var UNDOS = ["disabled", "regular", "perfect"];
@@ -49,7 +50,6 @@
     pumpId: null,
     worker: null,
     replayId: null,
-    holdStatus: null,
     plannerBusySince: 0,
     requestedKey: null,
     savedProtoMove: null,
@@ -193,11 +193,8 @@
     var g = gm();
     if (!g) return;
     var worker = null;
-    try { worker = new Worker("js/super_worker.js"); } catch (e) { worker = null; }
-    if (!worker) {
-      setStatus("headless needs a Web Worker — serve the page over http");
-      return;
-    }
+    try { worker = new Worker("js/super_worker.js?v=" + BUILD); } catch (e) { worker = null; }
+    if (!worker) return; // no Web Worker (file://): headless is unavailable
 
     controller.running = true;
     controller.finale = false;
@@ -233,12 +230,9 @@
       // Headless means headless: no rendering at all mid-run — the
       // board stays dimmed and frozen, only the counters live. The
       // final position installs when the run ends (or is stopped).
-      updateHud(false);
+      updateHud();
     };
-    worker.onerror = function () {
-      setStatus("worker error — headless run stopped");
-      stopRun("error");
-    };
+    worker.onerror = function () { stopRun("error"); };
     worker.postMessage({ type: "headless", corner: controller.corner,
                          orient: controller.orient,
                          goal: runGoal(),
@@ -253,7 +247,7 @@
     updateControls();
     // Just keep the clock ticking; progress messages drive everything else.
     controller.pumpId = setInterval(function () {
-      if (controller.running) updateHud(false);
+      if (controller.running) updateHud();
     }, 500);
   }
 
@@ -302,7 +296,7 @@
     installBoard(b, score);
     document.body.classList.remove("super-computing");
     controller.finale = true;
-    updateHud(false);
+    updateHud();
 
     var idx = from;
     var endHeld = false;
@@ -320,10 +314,6 @@
           // The last frame IS the money shot: the complete chain,
           // 131072 down to 4. Hold the pose before the overlay.
           endHeld = true;
-          controller.holdStatus = controller.goal === "score"
-            ? "move 129,333 — MAXIMUM SCORE: 3,925,224 points, the board dead on the full spiral"
-            : "move 65,533 — THE 131072 SPIRAL: every power of two at once";
-          setStatus(controller.holdStatus);
           render();
           controller.replayId = setTimeout(playNext, SPIRAL_HOLD_MS);
           return;
@@ -335,7 +325,6 @@
         stopRun("won");
         return;
       }
-      controller.holdStatus = null; // any lingering pose is over
       var st = book.steps[idx++];
       var sim = Super.simMove(b, st.dir);
       sim.board[st.cell] = st.value;
@@ -354,14 +343,9 @@
         controller.aiActing = false;
       }
       render();
-      updateHud(false);
+      updateHud();
       var wait = stepMs;
-      if (primed(b)) {
-        wait = SPIRAL_HOLD_MS;
-        controller.holdStatus =
-          "move 32,766 — THE PERFECT SPIRAL: 65536 … 4, one fold from 131072";
-        setStatus(controller.holdStatus);
-      }
+      if (primed(b)) wait = SPIRAL_HOLD_MS; // the pose on the primed spiral
       controller.replayId = setTimeout(playNext, wait);
     }
     controller.replayId = setTimeout(playNext, 700);
@@ -400,7 +384,7 @@
     controller.plannerBusySince = 0;
     var honest = honestPlay();
     try {
-      controller.worker = new Worker("js/super_worker.js");
+      controller.worker = new Worker("js/super_worker.js?v=" + BUILD);
       controller.worker.postMessage({ type: "init", corner: controller.corner,
                                       orient: controller.orient,
                                       goal: runGoal(),
@@ -484,7 +468,6 @@
     if (controller.pumpId) clearInterval(controller.pumpId);
     if (controller.replayId) clearTimeout(controller.replayId);
     controller.rafId = controller.pumpId = controller.replayId = null;
-    controller.holdStatus = null;
     controller.requestedKey = null;
     if (controller.worker) { controller.worker.terminate(); controller.worker = null; }
     if (controller.driver) controller.driver.detach();
@@ -499,7 +482,7 @@
     document.body.classList.remove("super-computing");
     render();
     updateControls();
-    updateHud(why === "won");
+    updateHud();
   }
 
   // The finale (folding the finished spiral into 131072) plays at a
@@ -543,7 +526,7 @@
     }
 
     if (controller.dirty) render();
-    updateHud(false);
+    updateHud();
   }
 
   function stepOnce() {
@@ -575,7 +558,6 @@
       return "halt";
     }
     if (ev.type === "stuck") {
-      setStatus("stuck — " + (ev.reason || "unknown") + " (stopped)");
       stopRun("stuck");
       return "halt";
     }
@@ -612,10 +594,6 @@
   // UI
   // ----------------------------------------------------------------
 
-  function setStatus(text) {
-    $(".super-status").textContent = text;
-  }
-
   function fmtInt(n) {
     return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   }
@@ -633,7 +611,7 @@
     } catch (e) { return false; }
   }
 
-  // Words for the honest selection.
+  // Words for the honest selection (the end-of-run overlay).
   function algoWho() {
     return controller.algo === "genius"
       ? "GENIUS" : "aj-r's " + ALGO_NAMES[controller.algo];
@@ -646,7 +624,8 @@
     return "undo only to escape game over";
   }
 
-  function updateHud(justWon) {
+  // The HUD: three counters, nothing that changes width.
+  function updateHud() {
     var d = controller.driver;
     var hs = controller.headless;
     var st = d ? d.stats : (hs && hs.stats);
@@ -664,84 +643,6 @@
     var secs = Math.floor((Date.now() - controller.startedAt) / 1000);
     $(".super-stat-time").textContent =
       Math.floor(secs / 60) + ":" + ("0" + (secs % 60)).slice(-2);
-
-    var honest = honestPlay();
-    if (controller.done || justWon) {
-      setStatus(endStatus(st));
-    } else if (controller.finale) {
-      // A held pose (the primed spiral, the finished chain) owns the
-      // status for as long as the camera lingers on it.
-      setStatus(controller.holdStatus ||
-        (controller.goal === "spiral"
-          ? "FINALE — the last tiles of the full spiral…"
-          : "FINALE — folding the spiral into 131072…"));
-    } else if (controller.running && !d && hs) {
-      var hmax = hs.board ? Super.maxTile(hs.board) : 0;
-      var mps = hs.elapsed > 500
-        ? " at " + fmtInt(Math.round(st.moves / (hs.elapsed / 1000))) + " moves/s"
-        : "";
-      if (honest) {
-        setStatus("headless — " + algoWho() + " as pure data" + mps +
-          " — move " + fmtInt(st.moves) + " — score " + fmtInt(st.score) +
-          " — largest tile " + fmtInt(hmax) +
-          (controller.undo === "regular" && controller.tiles === "regular"
-            ? " — deaths " + fmtInt(st.deaths || 0) : ""));
-      } else if (controller.tiles === "perfect") {
-        setStatus("computing the perfect " +
-          (controller.goal === "spiral" ? "spiral — move "
-         : controller.goal === "score" ? "score run — move " : "game — move ") +
-          fmtInt(st.moves) + " of " + lineMoves() +
-          " — zero undos, by construction — largest tile " + fmtInt(hmax));
-      } else {
-        setStatus("headless — pure data, no rendering" + mps +
-          (onBook() ? " — move " + fmtInt(st.moves) + " of " + lineMoves() : "") +
-          " — largest tile " + fmtInt(hmax) +
-          (controller.goal === "score"
-            ? " — score " + fmtInt(st.score) + " / 3,932,156"
-            : controller.goal === "spiral" ? " — building the full spiral" : ""));
-      }
-    } else if (controller.running) {
-      var thinking = controller.plannerBusySince &&
-        Date.now() - controller.plannerBusySince > 400;
-      var max = Super.maxTile(d.readBoard());
-      var progress;
-      if (honest) {
-        progress = algoWho() + " — " + tilesWords() + ", " + undoWords() +
-          " — move " + fmtInt(st.moves) + " — score " + fmtInt(gm().score) +
-          " — largest tile " + fmtInt(max) +
-          (st.deaths ? " — deaths " + fmtInt(st.deaths) : "");
-      } else {
-        var bookOf = onBook()
-          ? "move " + fmtInt(st.moves) + " of " + lineMoves() + " — "
-          : "";
-        progress = controller.goal === "score"
-          ? bookOf + "score " + fmtInt(gm().score) +
-            " / 3,932,156 — largest tile " + fmtInt(max)
-          : controller.goal === "spiral"
-          ? (bookOf || "building the FULL spiral — ") + "largest tile " + fmtInt(max)
-          : (bookOf || "building the spiral — ") + "largest tile " + fmtInt(max);
-        if (controller.tiles !== "perfect") progress += " (honest spawns, re-rolled)";
-      }
-      setStatus((thinking ? "thinking… — " : "") + progress);
-    }
-  }
-
-  function endStatus(st) {
-    if (honestPlay()) {
-      var mt = st.maxTile || 0;
-      var tail = algoWho() + " reached " + fmtInt(mt) + " with " +
-        fmtInt(st.score) + " points in " + fmtInt(st.moves) + " moves";
-      if (controller.endReason === "won") return "131072 by honest play — " + tail + "!";
-      if (controller.endReason === "out of luck") {
-        return "out of luck — " + STALL_DEATHS + " deaths in a row without a new best: " + tail;
-      }
-      return "game over — " + tail;
-    }
-    return controller.goal === "score"
-      ? "maximum score reached — the board died gloriously!"
-      : controller.goal === "spiral"
-      ? "THE 131072 SPIRAL — every power of two on the board at once!"
-      : "131072 — perfect spiral complete!";
   }
 
   function setRow(name, shown) {
@@ -777,49 +678,42 @@
         el.getAttribute("data-speed") === controller.speed);
       el.classList.toggle("disabled", false);
     });
-    drawSpiral();
-    if (!controller.running && !controller.done) setStatus("");
+    drawPickers();
   }
 
-  // The spiral picker. Which way the 65536 sits from the 131072 is what
-  // the two chips say, in words that depend on the corner.
-  function orientWords(corner, orient) {
-    var fromLeft = corner === "tl" || corner === "bl";
-    var fromTop = corner === "tl" || corner === "tr";
-    if (orient === "row") return fromLeft ? "➡ RIGHT" : "⬅ LEFT";
-    return fromTop ? "⬇ DOWN" : "⬆ UP";
-  }
-
-  function drawSpiral() {
-    var S = Super.snakeCells(controller.corner, controller.orient);
-    var order = {};
-    var pts = [];
-    for (var i = 0; i < 16; i++) {
-      order[S[i]] = i;
-      pts.push((7 + 16 * (S[i] % 4)) + "," + (7 + 16 * ((S[i] / 4) | 0)));
-    }
-    var line = $(".super-mini-path polyline");
-    if (line) line.setAttribute("points", pts.join(" "));
-    var head = $(".super-mini-head");
-    if (head) {
-      head.setAttribute("cx", 7 + 16 * (S[0] % 4));
-      head.setAttribute("cy", 7 + 16 * ((S[0] / 4) | 0));
-    }
-    $all(".super-mini-cell").forEach(function (el) {
-      var c = Number(el.getAttribute("data-cell"));
-      el.classList.toggle("selected", c === S[0]);
-      // The cells fade along the snake: brightest at the corner.
-      el.style.background = c === S[0] ? ""
-        : "rgba(246, 94, 59, " + (0.55 - 0.032 * order[c]).toFixed(3) + ")";
-      if (el.classList.contains("super-corner-cell")) {
-        el.classList.toggle("disabled", controller.running);
-      }
-    });
-    $all(".super-orient-chip").forEach(function (el) {
-      var o = el.getAttribute("data-orient");
-      el.textContent = orientWords(controller.corner, o);
-      el.classList.toggle("selected", o === controller.orient);
+  // Two fixed-size pickers: the corner grid says where the 131072
+  // lives; the spiral grids draw both snakes out of that corner (along
+  // its row, along its column) and you click the one you want.
+  function drawPickers() {
+    $all(".super-corner-cell").forEach(function (el) {
+      el.classList.toggle("selected", el.getAttribute("data-corner") === controller.corner);
       el.classList.toggle("disabled", controller.running);
+    });
+    $all(".super-spiral").forEach(function (box) {
+      var orient = box.getAttribute("data-orient");
+      var S = Super.snakeCells(controller.corner, orient);
+      var order = {};
+      var pts = [];
+      for (var i = 0; i < 16; i++) {
+        order[S[i]] = i;
+        pts.push((5 + 12 * (S[i] % 4)) + "," + (5 + 12 * ((S[i] / 4) | 0)));
+      }
+      var line = box.querySelector("polyline");
+      if (line) line.setAttribute("points", pts.join(" "));
+      var head = box.querySelector("circle");
+      if (head) {
+        head.setAttribute("cx", 5 + 12 * (S[0] % 4));
+        head.setAttribute("cy", 5 + 12 * ((S[0] / 4) | 0));
+      }
+      box.querySelectorAll(".super-mini-cell").forEach(function (el) {
+        var c = Number(el.getAttribute("data-cell"));
+        el.classList.toggle("selected", c === S[0]);
+        // The cells fade along the snake: brightest at the corner.
+        el.style.background = c === S[0] ? ""
+          : "rgba(246, 94, 59, " + (0.55 - 0.032 * order[c]).toFixed(3) + ")";
+      });
+      box.classList.toggle("selected", orient === controller.orient);
+      box.classList.toggle("disabled", controller.running);
     });
   }
 
@@ -889,7 +783,6 @@
   function setOption(name, value) {
     if (name === "finale") controller.finaleMode = value;
     else controller[name] = value;
-    if (name === "orient") savePref("super2048.orient", value);
     savePref("super2048." + name, value);
     if (name === "tiles" && value === "perfect") {
       // The instant computed run is PERFECT's default experience;
@@ -907,7 +800,7 @@
       if (controller.running) stopRun("user"); else startRun();
     });
 
-    var OPTION_ATTRS = ["tiles", "undo", "algo", "goal", "finale", "orient"];
+    var OPTION_ATTRS = ["tiles", "undo", "algo", "goal", "finale"];
     $all(".super-chip").forEach(function (el) {
       el.addEventListener("click", function (e) {
         e.preventDefault();
@@ -937,16 +830,17 @@
       el.addEventListener("click", function (e) {
         e.preventDefault();
         if (controller.running) return; // pick before you launch
-        var corner = el.getAttribute("data-corner");
-        if (corner === controller.corner) {
-          // Clicking the chosen corner again flips the spiral.
-          controller.orient = controller.orient === "row" ? "col" : "row";
-          savePref("super2048.orient", controller.orient);
-        } else {
-          controller.corner = corner;
-          savePref("super2048.corner", controller.corner);
-        }
+        controller.corner = el.getAttribute("data-corner");
+        savePref("super2048.corner", controller.corner);
         updateControls();
+      });
+    });
+
+    $all(".super-spiral").forEach(function (el) {
+      el.addEventListener("click", function (e) {
+        e.preventDefault();
+        if (controller.running) return;
+        setOption("orient", el.getAttribute("data-orient"));
       });
     });
 
