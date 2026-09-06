@@ -13,7 +13,7 @@
 
   var Super = window.Super2048;
   var BASE_MPS = 8; // moves per second at 1x
-  var BUILD = "3";  // bump with index.html's ?v= so browsers refetch the scripts
+  var BUILD = "4";  // bump with index.html's ?v= so browsers refetch the scripts
 
   var TILES = ["evil", "regular", "perfect"];
   var UNDOS = ["disabled", "regular", "perfect"];
@@ -664,6 +664,7 @@
     var honest = honestPlay();
     setRow("undo", controller.tiles === "regular");
     setRow("algo", honest);
+    setRow("algo2", honest);
     setRow("finale", !honest);
     selectChips("data-tiles", controller.tiles);
     selectChips("data-undo", controller.undo);

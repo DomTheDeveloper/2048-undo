@@ -43,8 +43,16 @@
   to   { box-shadow: 0 0 14px rgba(243, 215, 116, 0.95); }
 }
 
-/* Option rows: a label and a set of chips. Rows that don't apply to
-   the current selection are hidden. */
+/* The name is longer than "2048"; keep it on one line beside the
+   score boxes. */
+h1.title {
+  font-size: 44px;
+  line-height: 66px;
+}
+
+/* Option rows: a fixed label column and a set of chips that share the
+   row's width equally, so every row lines up and nothing overflows.
+   Rows that don't apply to the current selection are hidden. */
 .super-row {
   display: -webkit-flex;
   display: flex;
@@ -59,9 +67,8 @@
 .super-chip.super-hidden { display: none; }
 
 .super-label {
-  display: inline-block;
-  min-width: 46px;
-  margin-right: 4px;
+  -webkit-flex: 0 0 54px;
+  flex: 0 0 54px;
   font-size: 11px;
   font-weight: bold;
   text-transform: uppercase;
@@ -70,24 +77,25 @@
 }
 
 .super-chip {
-  display: inline-block;
-  background: rgba(238, 228, 218, 0.35);
+  display: block;
+  -webkit-flex: 1 1 0;
+  flex: 1 1 0;
+  min-width: -webkit-max-content; /* never squeeze a label into an ellipsis */
+  min-width: max-content;
+  margin-left: 4px;
+  padding: 7px 6px;
   border-radius: 3px;
-  padding: 6px 12px;
-  margin: 2px 6px 2px 0;
+  background: rgba(238, 228, 218, 0.35);
   color: #f9f6f2;
   font-weight: bold;
-  font-size: 13px;
+  font-size: 12px;
+  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
   cursor: pointer;
   text-decoration: none;
   -webkit-user-select: none;
   user-select: none;
-}
-
-.super-chip small {
-  font-weight: normal;
-  opacity: 0.8;
-  margin-left: 4px;
 }
 
 .super-chip:hover { background: rgba(238, 228, 218, 0.55); }
@@ -99,46 +107,8 @@
 
 .super-chip.disabled { cursor: default; opacity: 0.6; }
 
-.super-controls {
-  display: -webkit-flex;
-  display: flex;
-  -webkit-align-items: center;
-  align-items: center;
-  -webkit-justify-content: space-between;
-  justify-content: space-between;
-  margin-top: 10px;
-}
-
-.super-speeds {
-  display: -webkit-flex;
-  display: flex;
-  -webkit-flex-wrap: wrap;
-  flex-wrap: wrap;
-  -webkit-align-items: center;
-  align-items: center;
-}
-
-.super-speed {
-  display: inline-block;
-  background: rgba(238, 228, 218, 0.35);
-  border-radius: 3px;
-  padding: 6px 10px;
-  margin: 2px 4px 2px 0;
-  color: #f9f6f2;
-  font-weight: bold;
-  font-size: 13px;
-  cursor: pointer;
-  text-decoration: none;
-  -webkit-user-select: none;
-  user-select: none;
-}
-
-.super-speed:hover { background: rgba(238, 228, 218, 0.55); }
-
-.super-speed.selected {
-  background: #edc22e;
-  color: #776e65;
-}
+.super-row[data-row="speed2"],
+.super-row[data-row="algo2"] { margin-top: 4px; }
 
 /* The pickers: a 2x2 corner grid says where the 131072 lives; two 4x4
    spiral grids draw both snakes out of that corner and you click the
@@ -360,13 +330,7 @@
     -webkit-align-items: flex-start;
     align-items: flex-start;
   }
-  .super-controls {
-    -webkit-flex-direction: column;
-    flex-direction: column;
-    -webkit-align-items: flex-start;
-    align-items: flex-start;
-  }
-  .super-win h2 { font-size: 36px; margin-top: 40px; }
+    .super-win h2 { font-size: 36px; margin-top: 40px; }
 }
 
 /* Headless: a different kind of fast — pure data, no rendering. */
