@@ -9,6 +9,7 @@ function GameManager(size, InputManager, Actuator, ScoreManager) {
   this.inputManager.on("move", this.move.bind(this));
   this.inputManager.on("restart", this.restart.bind(this));
   this.inputManager.on("keepPlaying", this.keepPlaying.bind(this));
+  this.inputManager.on("closeMessage", this.closeMessage.bind(this));
 
   this.undoStack = [];
 
@@ -19,6 +20,12 @@ function GameManager(size, InputManager, Actuator, ScoreManager) {
 GameManager.prototype.restart = function () {
   this.actuator.continue();
   this.setup();
+};
+
+// Close the game-over / you-win screen without restarting: the board
+// stays as it is (undo still works), only the message goes away.
+GameManager.prototype.closeMessage = function () {
+  this.actuator.continue();
 };
 
 // Keep playing after winning

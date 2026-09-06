@@ -1,4 +1,4 @@
-/* Super Mode styles for 2048-undo. */
+/* 2048-ai: the AI panel, overlays and the two biggest tiles. */
 
 .super-panel {
   background: #bbada0;
@@ -50,18 +50,33 @@
   line-height: 1.3;
 }
 
-.super-modes {
+/* Option rows: a label and a set of chips. Rows that don't apply to
+   the current selection are hidden. */
+.super-row {
   display: -webkit-flex;
   display: flex;
   -webkit-flex-wrap: wrap;
   flex-wrap: wrap;
-  margin-top: 10px;
+  -webkit-align-items: center;
+  align-items: center;
+  margin-top: 6px;
 }
 
-.super-goals { margin-top: 6px; }
+.super-row.super-hidden,
+.super-chip.super-hidden { display: none; }
 
-.super-mode-btn,
-.super-goal-btn {
+.super-label {
+  display: inline-block;
+  min-width: 46px;
+  margin-right: 4px;
+  font-size: 11px;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.75;
+}
+
+.super-chip {
   display: inline-block;
   background: rgba(238, 228, 218, 0.35);
   border-radius: 3px;
@@ -76,24 +91,20 @@
   user-select: none;
 }
 
-.super-mode-btn small,
-.super-goal-btn small {
+.super-chip small {
   font-weight: normal;
   opacity: 0.8;
   margin-left: 4px;
 }
 
-.super-mode-btn:hover,
-.super-goal-btn:hover { background: rgba(238, 228, 218, 0.55); }
+.super-chip:hover { background: rgba(238, 228, 218, 0.55); }
 
-.super-mode-btn.selected,
-.super-goal-btn.selected {
+.super-chip.selected {
   background: #edc22e;
   color: #776e65;
 }
 
-.super-mode-btn.disabled,
-.super-goal-btn.disabled { cursor: default; opacity: 0.6; }
+.super-chip.disabled { cursor: default; opacity: 0.6; }
 
 .super-controls {
   display: -webkit-flex;
@@ -110,6 +121,8 @@
   display: flex;
   -webkit-flex-wrap: wrap;
   flex-wrap: wrap;
+  -webkit-align-items: center;
+  align-items: center;
 }
 
 .super-speed {
@@ -315,3 +328,44 @@
   filter: saturate(0.4);
   transition: opacity 0.4s ease, filter 0.4s ease;
 }
+
+/* Above the board: the intro on the left, a Try again button on the
+   right (the stock message's Try again lives inside the overlay; this
+   one is always there). */
+.above-game {
+  display: -webkit-flex;
+  display: flex;
+  -webkit-align-items: center;
+  align-items: center;
+  -webkit-justify-content: space-between;
+  justify-content: space-between;
+}
+
+.above-game .game-intro { margin: 0; }
+
+.restart-button {
+  display: inline-block;
+  background: #8f7a66;
+  border-radius: 3px;
+  padding: 0 20px;
+  height: 40px;
+  line-height: 42px;
+  margin-left: 12px;
+  color: #f9f6f2;
+  font-weight: bold;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.restart-button:hover { background: #9f8b77; }
+
+.game-credit {
+  margin: 8px 0 16px 0;
+  font-size: 14px;
+}
+
+/* The stock message's Close button sits beside Try again. */
+.game-container .game-message a.close-message-button { display: inline-block; }

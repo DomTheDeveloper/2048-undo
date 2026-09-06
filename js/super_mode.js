@@ -1,14 +1,29 @@
-// Super Mode UI controller for 2048-undo.
+// 2048-ai UI controller.
 //
-// Drives the SuperAI (js/super_ai.js) against the live game: speed
-// control (1x-5x and AFAP), target-corner picker, HUD with move/undo
-// counters, a cinematic finale, and a 131072 celebration overlay.
+// Drives the AIs against the live game: js/super_ai.js for perfect
+// play (the computed lines, with placed spawns or with the undo trick)
+// and js/honest_ai.js for honest play (aj-r's AIs and GENIUS against
+// regular or Evil tiles, with or without the undo button as a human
+// would use it). Owns the option rows, the speed control (1x-100x,
+// AFAP, HEADLESS), the corner picker, the HUD, the slow-motion or
+// instant finale, and the end-of-run overlay.
 
 (function () {
   "use strict";
 
   var Super = window.Super2048;
   var BASE_MPS = 8; // moves per second at 1x
+
+  var TILES = ["evil", "regular", "perfect"];
+  var UNDOS = ["disabled", "regular", "perfect"];
+  var ALGOS = ["genius", "smart", "algorithm", "priority", "random"];
+  var GOALS = ["tile", "score", "spiral"];
+  var SPEEDS = ["1", "2", "3", "4", "5", "10", "20", "50", "100", "afap", "headless"];
+  var FINALES = ["slow", "hyper"];
+  var CORNERS = ["tl", "tr", "bl", "br"];
+  var ALGO_NAMES = { genius: "GENIUS", smart: "SMART", algorithm: "ALGORITHM",
+                     priority: "PRIORITY", random: "RANDOM" };
+  var STALL_DEATHS = 40; // mirrors honest_ai.js
 
   var controller = {
     running: false,
@@ -17,9 +32,14 @@
     driver: null,
     corner: null,
     speed: null,
-    mode: null,
+    tiles: null,
+    undo: null,
+    algo: null,
+    goal: null,
+    finaleMode: null,
     finale: false,
     done: false,
+    endReason: null,
     startedAt: 0,
     lastTick: 0,
     moveDebt: 0,
@@ -44,11 +64,39 @@
   function savePref(key, value) {
     try { localStorage.setItem(key, value); } catch (e) { /* private mode */ }
   }
+  function pick(value, allowed, fallback) {
+    return allowed.indexOf(value) >= 0 ? value : fallback;
+  }
 
-  controller.corner = loadPref("super2048.corner", "br");
-  controller.speed = loadPref("super2048.speed", "afap");
-  controller.mode = loadPref("super2048.mode", "super");
-  controller.goal = loadPref("super2048.goal", "tile");
+  // Saved choices (the old single "mode" pref maps onto the new rows:
+  // SUPER was regular tiles + perfect undo, the others perfect tiles).
+  var legacyMode = loadPref("super2048.mode", null);
+  controller.corner = pick(loadPref("super2048.corner", "br"), CORNERS, "br");
+  controller.speed = pick(loadPref("super2048.speed", "afap"), SPEEDS, "afap");
+  controller.tiles = pick(loadPref("super2048.tiles",
+    legacyMode && legacyMode !== "super" ? "perfect" : "regular"), TILES, "regular");
+  controller.undo = pick(loadPref("super2048.undo", "perfect"), UNDOS, "perfect");
+  controller.algo = pick(loadPref("super2048.algo", "genius"), ALGOS, "genius");
+  controller.goal = pick(loadPref("super2048.goal", "tile"), GOALS, "tile");
+  controller.finaleMode = pick(loadPref("super2048.finale", "slow"), FINALES, "slow");
+
+  // What kind of run the selection describes. Perfect play is the
+  // computed line — spawns placed (PERFECT tiles) or re-rolled onto it
+  // (REGULAR tiles + PERFECT undo); everything else is honest play.
+  function perfectPlay() {
+    return controller.tiles === "perfect" ||
+           (controller.tiles === "regular" && controller.undo === "perfect");
+  }
+  function honestPlay() { return !perfectPlay(); }
+  function runGoal() {
+    if (perfectPlay()) return controller.goal;
+    return controller.goal === "score" ? "score" : "tile";
+  }
+  function honestConfig() {
+    return { algo: controller.algo, tiles: controller.tiles,
+             undo: controller.tiles === "regular" ? controller.undo : "disabled" };
+  }
+  function slowFinale() { return perfectPlay() && controller.finaleMode === "slow"; }
 
   // ----------------------------------------------------------------
   // Game hooks
@@ -61,8 +109,8 @@
 
     controller.savedProtoMove = GameManager.prototype.move;
     GameManager.prototype.move = function (dir) {
-      // While Super Mode runs, only the AI may move (keys/swipes are
-      // bound directly to this prototype method, so gate it here).
+      // While the AI runs, only the AI may move (keys/swipes are bound
+      // directly to this prototype method, so gate it here).
       if (controller.running && !controller.aiActing) return;
       return controller.savedProtoMove.call(this, dir);
     };
@@ -90,6 +138,9 @@
   function render() {
     var g = gm();
     if (g.won && !g.keepPlaying) g.keepPlaying = true; // never show "You win!" mid-run
+    // A death the undo button already took back must not leave the
+    // stock "Game over!" screen behind.
+    if (!g.isGameTerminated()) g.actuator.clearMessage();
     GameManager.prototype.actuate.call(g);
     controller.dirty = false;
   }
@@ -106,9 +157,9 @@
   // ----------------------------------------------------------------
   // Headless: the whole game runs in the worker as matrix data — no
   // rendering per move, no round trips, no frame budget. The page just
-  // shows a live counter and an occasional board snapshot, and installs
-  // the final position into the real game at the end. Full speed even
-  // in a background tab (rAF throttling can't touch a worker).
+  // shows the live counters and installs the final position into the
+  // real game at the end. Full speed even in a background tab (rAF
+  // throttling can't touch a worker).
   // ----------------------------------------------------------------
 
   function buildGrid(board, still) {
@@ -141,18 +192,14 @@
     var worker = null;
     try { worker = new Worker("js/super_worker.js"); } catch (e) { worker = null; }
     if (!worker) {
-      // No workers here (e.g. file://): headless can't run in the
-      // background, so fall back to the fastest rendered mode.
-      controller.speed = "afap";
-      savePref("super2048.speed", controller.speed);
-      updateControls();
-      startRun();
+      setStatus("headless needs a Web Worker — serve the page over http");
       return;
     }
 
     controller.running = true;
     controller.finale = false;
     controller.done = false;
+    controller.endReason = null;
     controller.startedAt = Date.now();
     controller.driver = null;
     controller.headless = { stats: { moves: 0, attempts: 0, undos: 0, score: 0 },
@@ -169,9 +216,9 @@
       controller.headless = { stats: msg.stats, board: msg.board,
                               elapsed: msg.elapsed };
       if (msg.type === "headlessDone") {
+        controller.endReason = msg.reason || "won";
         if (controller.worker) { controller.worker.terminate(); controller.worker = null; }
-        if (controller.mode === "perfect" &&
-            perfectFinaleReplay(msg.board, msg.stats.score)) {
+        if (slowFinale() && perfectFinaleReplay(msg.board, msg.stats.score)) {
           return; // the cinema ends with the overlay and stopRun
         }
         installBoard(msg.board, msg.stats.score);
@@ -190,9 +237,10 @@
       stopRun("error");
     };
     worker.postMessage({ type: "headless", corner: controller.corner,
-                         goal: controller.goal,
-                         predictable: controller.mode !== "super",
-                         perfect: controller.mode === "perfect" });
+                         goal: runGoal(),
+                         predictable: controller.tiles === "perfect",
+                         perfect: controller.tiles === "perfect",
+                         honest: honestPlay() ? honestConfig() : null });
 
     document.body.classList.add("super-running");
     // Every headless run turns the renderer off: dim and freeze the
@@ -319,9 +367,7 @@
   function startRun() {
     if (controller.running) return;
     // 🧮 HEADLESS runs in the worker with the renderer off. Everything
-    // else — PERFECT included — plays on the visible grid: a rendered
-    // PERFECT run replays the whole book move by move at the chosen
-    // speed, finale in slow motion, zero undos.
+    // else plays on the visible grid at the chosen speed.
     if (controller.speed === "headless") {
       startHeadless();
       return;
@@ -332,42 +378,53 @@
     controller.running = true;
     controller.finale = false;
     controller.done = false;
+    controller.endReason = null;
     controller.startedAt = Date.now();
     controller.lastTick = 0;
     controller.moveDebt = 0;
+    controller.frameBudget = 0;
     controller.headless = null;
 
     installHooks();
     hideWinOverlay();
 
-    // All searching happens in a worker so the page never freezes; if
-    // workers are unavailable (e.g. file://), fall back to planning on
+    // All thinking happens in a worker so the page never freezes; if
+    // workers are unavailable (e.g. file://), fall back to thinking on
     // the main thread.
     controller.worker = null;
     controller.requestedKey = null;
     controller.plannerBusySince = 0;
+    var honest = honestPlay();
     try {
       controller.worker = new Worker("js/super_worker.js");
       controller.worker.postMessage({ type: "init", corner: controller.corner,
-                                      goal: controller.goal,
-                                      perfect: controller.mode === "perfect" });
+                                      goal: runGoal(),
+                                      perfect: controller.tiles === "perfect",
+                                      honest: honest ? honestConfig() : null });
       controller.planStore = {};
       controller.worker.onmessage = function (e) {
         var msg = e.data;
-        if (msg.type === "plan" && controller.running) {
-          var key = msg.board.join(",");
+        if (!controller.running) return;
+        var key = msg.board ? msg.board.join(",") : null;
+        if (msg.type === "plan") {
           controller.planStore[key] = { board: msg.board, plan: msg.plan };
           var keys = Object.keys(controller.planStore);
           if (keys.length > 8) delete controller.planStore[keys[0]];
-          if (controller.requestedKey === key) {
-            controller.requestedKey = null;
-            controller.plannerBusySince = 0;
-            tick(null, true); // resume the burst right away, no frame wait
+        } else if (msg.type === "move") {
+          if (controller.driver && controller.driver.setMove) {
+            controller.driver.setMove(msg.board, msg.dir);
           }
+        } else {
+          return;
+        }
+        if (controller.requestedKey === key) {
+          controller.requestedKey = null;
+          controller.plannerBusySince = 0;
+          tick(null, "reply"); // resume the burst right away, no frame wait
         }
       };
       controller.worker.onerror = function () {
-        // Lose the worker, keep the run: fall back to sync planning.
+        // Lose the worker, keep the run: fall back to sync thinking.
         if (controller.worker) controller.worker.terminate();
         controller.worker = null;
         if (controller.driver) controller.driver.options.externalPlanner = false;
@@ -375,21 +432,31 @@
     } catch (e) { controller.worker = null; }
 
     controller.aiActing = true;
-    controller.driver = new Super.SuperDriver(g, controller.corner, Tile, {
-      predictable: controller.mode !== "super",
-      perfect: controller.mode === "perfect",
-      goal: controller.goal,
-      externalPlanner: !!controller.worker,
-      onDeadEnd: function (board) {
-        if (controller.worker) {
-          controller.worker.postMessage({ type: "markDead", board: board });
+    if (honest) {
+      var hc = honestConfig();
+      controller.driver = new Super.HonestDriver(g, controller.corner, Tile, {
+        algo: hc.algo,
+        tiles: hc.tiles,
+        undo: hc.undo,
+        goal: runGoal(),
+        externalPlanner: !!controller.worker
+      });
+    } else {
+      controller.driver = new Super.SuperDriver(g, controller.corner, Tile, {
+        predictable: controller.tiles === "perfect",
+        perfect: controller.tiles === "perfect",
+        goal: runGoal(),
+        externalPlanner: !!controller.worker,
+        onDeadEnd: function (board) {
+          if (controller.worker) {
+            controller.worker.postMessage({ type: "markDead", board: board });
+          }
         }
-      }
-    });
+      });
+    }
     // Attach before the restart: the opening pair then comes through
-    // the driver's spawner too — seated on the line for PERFECT and
-    // PREDICTABLE, honest random for SUPER (its first step re-rolls
-    // that opening onto the line like any other spawn).
+    // the driver's spawner too — seated on the line for perfect play,
+    // honest random (or Evil) otherwise.
     controller.driver.attach();
     g.undoStack.length = 0;        // a fresh run keeps its own history
     g.restart();
@@ -400,7 +467,7 @@
     controller.rafId = requestAnimationFrame(tick);
     // Keep making progress when the tab is hidden and rAF is throttled.
     controller.pumpId = setInterval(function () {
-      if (document.hidden && controller.running) tick(null, true);
+      if (document.hidden && controller.running) tick(null, "clock");
     }, 250);
   }
 
@@ -412,6 +479,7 @@
     if (controller.replayId) clearTimeout(controller.replayId);
     controller.rafId = controller.pumpId = controller.replayId = null;
     controller.holdStatus = null;
+    controller.requestedKey = null;
     if (controller.worker) { controller.worker.terminate(); controller.worker = null; }
     if (controller.driver) controller.driver.detach();
     if (controller.headless && controller.headless.board && why !== "won") {
@@ -428,39 +496,42 @@
     updateHud(why === "won");
   }
 
-  // The finale (folding the finished spiral into 131072) always plays at
-  // a readable pace, whatever speed built it — it's the money shot.
+  // The finale (folding the finished spiral into 131072) plays at a
+  // readable pace whatever speed built it — unless HYPERCOMPLETE says
+  // otherwise.
   var FINALE_MPS = 2.5;
 
-  function tick(ts, fromPump) {
+  // kind: undefined = an animation frame (schedules the next one and
+  // advances the clock); "clock" = the hidden-tab pump (advances the
+  // clock only); "reply" = a worker answer arrived (spend what the
+  // current frame still allows, right away).
+  function tick(ts, kind) {
     if (!controller.running) return;
-    if (!fromPump) controller.rafId = requestAnimationFrame(tick);
+    if (!kind) controller.rafId = requestAnimationFrame(tick);
 
     var now = Date.now();
-    if (!controller.lastTick) controller.lastTick = now;
-    var dt = Math.min(500, now - controller.lastTick);
-    controller.lastTick = now;
-
     var mps = controller.finale ? FINALE_MPS : speedMps();
-    var budgetMoves;
-    if (mps === Infinity) {
-      budgetMoves = Infinity;
-    } else {
-      controller.moveDebt += dt * mps / 1000;
-      budgetMoves = Math.floor(controller.moveDebt);
-      controller.moveDebt -= budgetMoves;
+    if (kind !== "reply") {
+      if (!controller.lastTick) controller.lastTick = now;
+      var dt = Math.min(500, now - controller.lastTick);
+      controller.lastTick = now;
+      if (mps !== Infinity) {
+        // Whatever the last frame didn't spend flows back into the debt.
+        controller.moveDebt += dt * mps / 1000 + (controller.frameBudget || 0);
+        controller.frameBudget = Math.floor(controller.moveDebt);
+        controller.moveDebt -= controller.frameBudget;
+      }
     }
 
     var deadline = now + (mps === Infinity ? 11 : 6);
-    var movesDone = 0;
-    while (movesDone < budgetMoves || (mps === Infinity && Date.now() < deadline)) {
-      if (mps !== Infinity && movesDone >= budgetMoves) break;
+    for (;;) {
+      if (mps !== Infinity && controller.frameBudget <= 0) break;
       var ev = stepOnce();
       if (ev === "halt") return;
       if (ev === "planwait") break; // the worker is thinking; stay smooth
       if (ev === "accepted") {
-        movesDone++;
-        if (controller.finale) break; // one finale move per frame batch
+        if (mps !== Infinity) controller.frameBudget--;
+        if (controller.finale) { controller.frameBudget = 0; break; } // one finale move per frame
       }
       if (Date.now() >= deadline) break;
     }
@@ -478,8 +549,8 @@
     } finally {
       controller.aiActing = false;
     }
-    if (ev.type === "accepted" && (ev.phase === "finale" || ev.phase === "primed") &&
-        !controller.finale) {
+    if (ev.type === "accepted" && slowFinale() &&
+        (ev.phase === "finale" || ev.phase === "primed") && !controller.finale) {
       controller.finale = true;
       controller.dirty = true;
       render(); // show the primed board before the slow-motion collapse
@@ -490,6 +561,7 @@
       controller.finale = false;
     }
     if (ev.type === "done") {
+      controller.endReason = ev.reason || "won";
       controller.done = true;
       render();
       showWinOverlay();
@@ -516,6 +588,17 @@
       }
       return "planwait";
     }
+    if (ev.type === "needmove") {
+      var mkey = ev.board.join(",");
+      if (controller.worker && controller.requestedKey !== mkey) {
+        controller.requestedKey = mkey;
+        controller.plannerBusySince = Date.now();
+        controller.worker.postMessage({ type: "move", board: ev.board,
+                                        lastDir: ev.lastDir });
+      }
+      return "planwait";
+    }
+    if (ev.type === "backtrack") controller.dirty = true;
     return ev.type === "accepted" ? "accepted" : "working";
   }
 
@@ -531,8 +614,8 @@
     return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   }
 
-  // Every flavor plays the shipped line for its goal when the page has
-  // it; the lengths are exact by the mass ledger.
+  // Every perfect run plays the shipped line for its goal when the
+  // page has it; the lengths are exact by the mass ledger.
   function lineMoves() {
     return controller.goal === "spiral" ? "65,533"
          : controller.goal === "score" ? "129,333" : "32,781";
@@ -542,6 +625,19 @@
     try {
       return !!Super.hasBook(Super.bookFor(controller.goal));
     } catch (e) { return false; }
+  }
+
+  // Words for the honest selection.
+  function algoWho() {
+    return controller.algo === "genius"
+      ? "GENIUS" : "aj-r's " + ALGO_NAMES[controller.algo];
+  }
+  function tilesWords() {
+    return controller.tiles === "evil" ? "Evil tiles" : "regular tiles";
+  }
+  function undoWords() {
+    if (controller.tiles === "evil" || controller.undo === "disabled") return "no undo";
+    return "undo only to escape game over";
   }
 
   function updateHud(justWon) {
@@ -563,12 +659,9 @@
     $(".super-stat-time").textContent =
       Math.floor(secs / 60) + ":" + ("0" + (secs % 60)).slice(-2);
 
+    var honest = honestPlay();
     if (controller.done || justWon) {
-      setStatus(controller.goal === "score"
-        ? "maximum score reached — the board died gloriously!"
-        : controller.goal === "spiral"
-        ? "THE 131072 SPIRAL — every power of two on the board at once!"
-        : "131072 — perfect spiral complete!");
+      setStatus(endStatus(st));
     } else if (controller.finale) {
       // A held pose (the primed spiral, the finished chain) owns the
       // status for as long as the camera lingers on it.
@@ -578,20 +671,22 @@
           : "FINALE — folding the spiral into 131072…"));
     } else if (controller.running && !d && hs) {
       var hmax = hs.board ? Super.maxTile(hs.board) : 0;
-      if (controller.mode === "perfect") {
+      var mps = hs.elapsed > 500
+        ? " at " + fmtInt(Math.round(st.moves / (hs.elapsed / 1000))) + " moves/s"
+        : "";
+      if (honest) {
+        setStatus("headless — " + algoWho() + " as pure data" + mps +
+          " — move " + fmtInt(st.moves) + " — score " + fmtInt(st.score) +
+          " — largest tile " + fmtInt(hmax) +
+          (controller.undo === "regular" && controller.tiles === "regular"
+            ? " — deaths " + fmtInt(st.deaths || 0) : ""));
+      } else if (controller.tiles === "perfect") {
         setStatus("computing the perfect " +
           (controller.goal === "spiral" ? "spiral — move "
          : controller.goal === "score" ? "score run — move " : "game — move ") +
-          fmtInt(st.moves) +
-          (controller.goal === "spiral" ? " of 65,533"
-         : controller.goal === "score" ? " of 129,333" : " of 32,781") +
-          " — zero undos, by construction — " +
-          fmtInt(st.explored || 0) + " states searched — largest tile " +
-          fmtInt(hmax));
+          fmtInt(st.moves) + " of " + lineMoves() +
+          " — zero undos, by construction — largest tile " + fmtInt(hmax));
       } else {
-        var mps = hs.elapsed > 500
-          ? " at " + fmtInt(Math.round(st.moves / (hs.elapsed / 1000))) + " moves/s"
-          : "";
         setStatus("headless — pure data, no rendering" + mps +
           (onBook() ? " — move " + fmtInt(st.moves) + " of " + lineMoves() : "") +
           " — largest tile " + fmtInt(hmax) +
@@ -603,25 +698,75 @@
       var thinking = controller.plannerBusySince &&
         Date.now() - controller.plannerBusySince > 400;
       var max = Super.maxTile(d.readBoard());
-      var bookOf = controller.mode === "perfect" || onBook()
-        ? "move " + fmtInt(d.stats.moves) + " of " + lineMoves() + " — "
-        : null;
-      var progress = controller.goal === "score"
-        ? (bookOf || "") + "score " + fmtInt(gm().score) +
-          " / 3,932,156 — largest tile " + fmtInt(max)
-        : controller.goal === "spiral"
-        ? (bookOf || "building the FULL spiral — ") + "largest tile " + fmtInt(max)
-        : (bookOf || "building the spiral — ") + "largest tile " + fmtInt(max);
-      setStatus((thinking ? "thinking… — " : "") + progress +
-        (controller.mode === "predictable" ? " (spawns by design)"
-       : controller.mode === "super" ? " (honest spawns, re-rolled)" : ""));
+      var progress;
+      if (honest) {
+        progress = algoWho() + " — " + tilesWords() + ", " + undoWords() +
+          " — move " + fmtInt(st.moves) + " — score " + fmtInt(gm().score) +
+          " — largest tile " + fmtInt(max) +
+          (st.deaths ? " — deaths " + fmtInt(st.deaths) : "");
+      } else {
+        var bookOf = onBook()
+          ? "move " + fmtInt(st.moves) + " of " + lineMoves() + " — "
+          : "";
+        progress = controller.goal === "score"
+          ? bookOf + "score " + fmtInt(gm().score) +
+            " / 3,932,156 — largest tile " + fmtInt(max)
+          : controller.goal === "spiral"
+          ? (bookOf || "building the FULL spiral — ") + "largest tile " + fmtInt(max)
+          : (bookOf || "building the spiral — ") + "largest tile " + fmtInt(max);
+        progress += controller.tiles === "perfect"
+          ? " (spawns by design)" : " (honest spawns, re-rolled)";
+      }
+      setStatus((thinking ? "thinking… — " : "") + progress);
     }
+  }
+
+  function endStatus(st) {
+    if (honestPlay()) {
+      var mt = st.maxTile || 0;
+      var tail = algoWho() + " reached " + fmtInt(mt) + " with " +
+        fmtInt(st.score) + " points in " + fmtInt(st.moves) + " moves";
+      if (controller.endReason === "won") return "131072 by honest play — " + tail + "!";
+      if (controller.endReason === "out of luck") {
+        return "out of luck — " + STALL_DEATHS + " deaths in a row without a new best: " + tail;
+      }
+      return "game over — " + tail;
+    }
+    return controller.goal === "score"
+      ? "maximum score reached — the board died gloriously!"
+      : controller.goal === "spiral"
+      ? "THE 131072 SPIRAL — every power of two on the board at once!"
+      : "131072 — perfect spiral complete!";
+  }
+
+  function setRow(name, shown) {
+    var row = $('.super-row[data-row="' + name + '"]');
+    if (row) row.classList.toggle("super-hidden", !shown);
+  }
+
+  function selectChips(attr, value) {
+    $all(".super-chip[" + attr + "]").forEach(function (el) {
+      el.classList.toggle("selected", el.getAttribute(attr) === value);
+      el.classList.toggle("disabled", controller.running);
+    });
   }
 
   function updateControls() {
     $(".super-toggle").classList.toggle("super-on", controller.running);
     $(".super-toggle .super-toggle-label").textContent =
-      controller.running ? "STOP" : "SUPER MODE";
+      controller.running ? "STOP" : "RUN AI";
+    var honest = honestPlay();
+    setRow("undo", controller.tiles === "regular");
+    setRow("algo", honest);
+    setRow("finale", !honest);
+    selectChips("data-tiles", controller.tiles);
+    selectChips("data-undo", controller.undo);
+    selectChips("data-algo", controller.algo);
+    selectChips("data-goal", runGoal());
+    selectChips("data-finale", controller.finaleMode);
+    $all('.super-chip[data-goal="spiral"]').forEach(function (el) {
+      el.classList.toggle("super-hidden", honest);
+    });
     $all(".super-speed").forEach(function (el) {
       el.classList.toggle("selected",
         el.getAttribute("data-speed") === controller.speed);
@@ -631,33 +776,34 @@
       el.classList.toggle("selected", el.getAttribute("data-corner") === controller.corner);
       el.classList.toggle("disabled", controller.running);
     });
-    $all(".super-mode-btn").forEach(function (el) {
-      el.classList.toggle("selected", el.getAttribute("data-mode") === controller.mode);
-      el.classList.toggle("disabled", controller.running);
-    });
-    $all(".super-goal-btn").forEach(function (el) {
-      el.classList.toggle("selected", el.getAttribute("data-goal") === controller.goal);
-      el.classList.toggle("disabled", controller.running);
-    });
     if (!controller.running && !controller.done) {
-      var line = onBook() ? "the computed " + lineMoves() + "-move line, " : "";
-      var how = controller.mode === "perfect"
-        ? "all-4 feeding: the mathematical minimum of " +
-          (controller.goal === "spiral" ? "65,533" : "32,781") + " moves"
-        : controller.mode === "predictable"
-        ? line + "every next tile placed by design — zero undos"
-        : line + "played with honest spawns — every unlucky one undone, " +
-          "the opening pair included";
-      setStatus(controller.goal === "score"
-        ? "maximum-score run to 3,932,156 — " +
-          (controller.mode === "perfect"
-            ? "the computed 129,333-move line: 2s except the 1,735 geometrically forced 4s"
-            : how)
-        : controller.goal === "spiral"
-        ? "the FULL spiral — every power of two, 131072 down to 4, at once — " + how
-        : (controller.mode === "perfect"
-            ? "move-minimal game to 131072 — " : "perfect game to 131072 — ") + how);
+      setStatus(idleStatus());
     }
+  }
+
+  function idleStatus() {
+    if (honestPlay()) {
+      var who = controller.algo === "genius"
+        ? "GENIUS (this fork's expectimax)" : "aj-r's " + ALGO_NAMES[controller.algo];
+      return who + " plays honest 2048 — " + tilesWords() + ", " + undoWords() +
+        " — " + (runGoal() === "score" ? "for the most points" : "for the biggest tile it can");
+    }
+    var line = onBook() ? "the computed " + lineMoves() + "-move line, " : "";
+    var how = controller.tiles === "perfect"
+      ? line + "every next tile placed by design — zero undos"
+      : line + "played with honest spawns — every unlucky one undone, " +
+        "the opening pair included";
+    if (controller.goal === "score") {
+      return "maximum-score run to 3,932,156 — " +
+        (controller.tiles === "perfect"
+          ? "the computed 129,333-move line: 2s except the 1,735 geometrically forced 4s"
+          : how);
+    }
+    if (controller.goal === "spiral") {
+      return "the FULL spiral — every power of two, 131072 down to 4, at once — " + how;
+    }
+    return (controller.tiles === "perfect"
+      ? "move-minimal game to 131072 — " : "perfect game to 131072 — ") + how;
   }
 
   // NodeList.forEach polyfill for older browsers, matching the repo's era.
@@ -669,34 +815,47 @@
     var st = controller.driver ? controller.driver.stats
                                : controller.headless.stats;
     var el = $(".super-win");
-    var exact = onBook() ? "exactly " + lineMoves() + " moves"
-                         : fmtInt(st.moves) + " moves";
-    var how = controller.mode === "perfect"
-      ? (controller.speed === "headless" ? "computed as pure data: "
-                                          : "played from the book: ") +
-        exact + ", zero undos"
-      : controller.mode === "predictable"
-      ? "every tile placed by design: " + exact + ", zero undos"
-      : "honest spawns, every unlucky one undone: " + exact + ", " +
-        fmtInt(st.undos) + " undos";
-    if (controller.mode !== "perfect" && controller.speed === "headless") {
-      how += ", all as pure matrix data";
-    }
-    if (controller.goal === "score") {
-      $(".super-win h2").textContent = fmtInt(gm().score);
-      $(".super-win-sub").innerHTML =
-        "Maximum-score run complete — 131072 plus the full descending " +
-        "chain; " + how + ".<br>The board is dead. Gloriously.";
-    } else if (controller.goal === "spiral") {
-      $(".super-win h2").textContent = "131072";
-      $(".super-win-sub").innerHTML =
-        "THE FULL SPIRAL — every power of two from 131072 down to 4, " +
-        "one per cell; " + how + ".<br>The board is dead. Perfectly.";
+    var score = controller.driver ? gm().score : st.score;
+    if (honestPlay()) {
+      var mt = st.maxTile || Super.maxTile(controller.driver
+        ? controller.driver.readBoard() : controller.headless.board);
+      $(".super-win h2").textContent = fmtInt(mt);
+      var why = controller.endReason === "won"
+        ? "131072 by honest play. Unbelievable."
+        : controller.endReason === "out of luck"
+        ? "Out of luck: " + STALL_DEATHS + " deaths in a row without a new best score."
+        : "Game over — no moves left.";
+      $(".super-win-sub").innerHTML = why + "<br>" + algoWho() + " — " +
+        tilesWords() + ", " + undoWords() + " — score " + fmtInt(score) +
+        (st.deaths ? ", " + fmtInt(st.deaths) + " deaths escaped" : "") + ".";
     } else {
-      $(".super-win h2").textContent = "131072";
-      $(".super-win-sub").innerHTML =
-        "Perfect spiral complete, capped off by a spawned&nbsp;4 — " + how +
-        ".<br>The highest tile 2048 allows.";
+      var exact = onBook() ? "exactly " + lineMoves() + " moves"
+                           : fmtInt(st.moves) + " moves";
+      var how = controller.tiles === "perfect"
+        ? (controller.speed === "headless" ? "computed as pure data: "
+                                            : "played from the book: ") +
+          exact + ", zero undos"
+        : "honest spawns, every unlucky one undone: " + exact + ", " +
+          fmtInt(st.undos) + " undos";
+      if (controller.tiles !== "perfect" && controller.speed === "headless") {
+        how += ", all as pure matrix data";
+      }
+      if (controller.goal === "score") {
+        $(".super-win h2").textContent = fmtInt(score);
+        $(".super-win-sub").innerHTML =
+          "Maximum-score run complete — 131072 plus the full descending " +
+          "chain; " + how + ".<br>The board is dead. Gloriously.";
+      } else if (controller.goal === "spiral") {
+        $(".super-win h2").textContent = "131072";
+        $(".super-win-sub").innerHTML =
+          "THE FULL SPIRAL — every power of two from 131072 down to 4, " +
+          "one per cell; " + how + ".<br>The board is dead. Perfectly.";
+      } else {
+        $(".super-win h2").textContent = "131072";
+        $(".super-win-sub").innerHTML =
+          "Perfect spiral complete, capped off by a spawned&nbsp;4 — " + how +
+          ".<br>The highest tile 2048 allows.";
+      }
     }
     $(".super-win-moves").textContent = fmtInt(st.moves);
     $(".super-win-undos").textContent = fmtInt(st.undos);
@@ -710,10 +869,36 @@
     $(".super-win").classList.remove("super-win-active");
   }
 
+  function setOption(name, value) {
+    if (name === "finale") controller.finaleMode = value;
+    else controller[name] = value;
+    savePref("super2048." + name, value);
+    if (name === "tiles" && value === "perfect") {
+      // The instant computed run is PERFECT's default experience;
+      // picking a rendered speed afterwards plays the whole book on
+      // the visible grid instead.
+      controller.speed = "headless";
+      savePref("super2048.speed", controller.speed);
+    }
+    updateControls();
+  }
+
   function wireUp() {
     $(".super-toggle").addEventListener("click", function (e) {
       e.preventDefault();
       if (controller.running) stopRun("user"); else startRun();
+    });
+
+    var OPTION_ATTRS = ["tiles", "undo", "algo", "goal", "finale"];
+    $all(".super-chip").forEach(function (el) {
+      el.addEventListener("click", function (e) {
+        e.preventDefault();
+        if (controller.running) return; // pick before you launch
+        for (var i = 0; i < OPTION_ATTRS.length; i++) {
+          var v = el.getAttribute("data-" + OPTION_ATTRS[i]);
+          if (v) { setOption(OPTION_ATTRS[i], v); break; }
+        }
+      });
     });
 
     $all(".super-speed").forEach(function (el) {
@@ -736,33 +921,6 @@
         if (controller.running) return; // pick before you launch
         controller.corner = el.getAttribute("data-corner");
         savePref("super2048.corner", controller.corner);
-        updateControls();
-      });
-    });
-
-    $all(".super-mode-btn").forEach(function (el) {
-      el.addEventListener("click", function (e) {
-        e.preventDefault();
-        if (controller.running) return; // pick before you launch
-        controller.mode = el.getAttribute("data-mode");
-        savePref("super2048.mode", controller.mode);
-        if (controller.mode === "perfect") {
-          // The instant computed run is PERFECT's default experience;
-          // picking a rendered speed afterwards plays the whole book
-          // on the visible grid instead.
-          controller.speed = "headless";
-          savePref("super2048.speed", controller.speed);
-        }
-        updateControls();
-      });
-    });
-
-    $all(".super-goal-btn").forEach(function (el) {
-      el.addEventListener("click", function (e) {
-        e.preventDefault();
-        if (controller.running) return; // pick before you launch
-        controller.goal = el.getAttribute("data-goal");
-        savePref("super2048.goal", controller.goal);
         updateControls();
       });
     });

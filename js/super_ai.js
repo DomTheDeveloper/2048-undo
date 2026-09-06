@@ -1,4 +1,4 @@
-// Super Mode AI for 2048-undo.
+// Perfect-play AI for 2048-ai (the former Super Mode).
 //
 // Plays a provably-perfect game: it builds the full "perfect spiral"
 // (snake) 4, 8, 16, ... 65536 into a chosen corner, then a final 4 spawns

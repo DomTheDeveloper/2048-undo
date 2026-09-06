@@ -62,6 +62,20 @@ KeyboardInputManager.prototype.listen = function () {
   keepPlaying.addEventListener("click", this.keepPlaying.bind(this));
   keepPlaying.addEventListener("touchend", this.keepPlaying.bind(this));
 
+  // The try-again screen can simply be closed (the board stays as it
+  // died; Z still takes moves back), and a separate Try again button
+  // above the board restarts at any time.
+  var closeMessage = document.querySelector(".close-message-button");
+  if (closeMessage) {
+    closeMessage.addEventListener("click", this.closeMessage.bind(this));
+    closeMessage.addEventListener("touchend", this.closeMessage.bind(this));
+  }
+  var restart = document.querySelector(".restart-button");
+  if (restart) {
+    restart.addEventListener("click", this.restart.bind(this));
+    restart.addEventListener("touchend", this.restart.bind(this));
+  }
+
   // Listen to swipe events
   var touchStartClientX, touchStartClientY;
   var gameContainer = document.getElementsByClassName("game-container")[0];
@@ -102,4 +116,9 @@ KeyboardInputManager.prototype.restart = function (event) {
 KeyboardInputManager.prototype.keepPlaying = function (event) {
   event.preventDefault();
   this.emit("keepPlaying");
+};
+
+KeyboardInputManager.prototype.closeMessage = function (event) {
+  event.preventDefault();
+  this.emit("closeMessage");
 };

@@ -1,93 +1,162 @@
-# 2048
-A small clone of [1024](https://play.google.com/store/apps/details?id=com.veewo.a1024), based on [Saming's 2048](http://saming.fr/p/2048/) (also a clone).
+# 2048-ai
+A small clone of [1024](https://play.google.com/store/apps/details?id=com.veewo.a1024), based on [Saming's 2048](http://saming.fr/p/2048/) (also a clone), with Alok Menghrajani's undo mod — and an AI panel on top. [Play it here!](https://domthedeveloper.github.io/2048-undo/)
 
-Made just for fun. [Play it here!](http://gabrielecirulli.github.io/2048/)
+### 🤖 The AI panel
 
-### ⚡ SUPER MODE
+Hit **RUN AI** and the AI plays the board in front of you. The rows
+above the board decide what kind of game that is:
 
-This fork's undo button re-randomizes the spawn seed, which makes something
-delightful possible: an AI that plays a *perfect* game. Hit **SUPER MODE**
-and it builds the perfect spiral — 4, 8, 16 … 65536 snaked into your chosen
-corner — undoing every unlucky spawn along the way (watch the undo counter).
-When the spiral is complete, one final 4 drops into the last free cell and
-the whole chain folds into **131072**, the highest tile 2048's rules allow.
+- **TILES** — where the new tiles come from.
+  - **😈 EVIL** — AJ Richardson's Evil generator, ported from his
+    [2048-AI](https://github.com/aj-r/2048-AI): every new tile lands
+    on the edge the last move packed the board against, in the line
+    whose nearest neighbours are largest (nothing for it to merge
+    with), as a 2 unless those neighbours are 2s — then a 4.
+  - **🎲 REGULAR** — honest 2048: a random empty cell, 90% twos.
+  - **👑 PERFECT** — the AI places every tile itself: the computed
+    perfect line (below), zero undos.
+- **UNDO** (regular tiles) — what the undo button is for.
+  - **🚫 DISABLED** — the run ends when the board dies.
+  - **↩️ REGULAR** — the button as a human uses it: only to escape game
+    over. Each death takes back a growing number of moves (1, 2, 4 …
+    64) and play resumes with fresh luck; a new best score resets the
+    ladder. Forty deaths in a row without a new best and the run is
+    *out of luck*.
+  - **⚡ PERFECT** — the button as a superpower: every spawn that is not
+    on the computed perfect line gets undone and re-rolled, the opening
+    pair included (two 4s seated in the corner is a one-in-twelve-
+    thousand deal, so the run restarts about 12,000 times before its
+    first move). Exactly 32,781 moves and about 1.9 million undos to
+    131072, every one of them counted.
+- **AI** (honest play) — who moves.
+  - **🧠 GENIUS** — this fork's own: a depth-adaptive expectimax over
+    row tables (every row and column is one table lookup), scoring
+    empty cells, available merges, monotonicity and tile sum in the
+    nneonneo tradition, with a pull toward your corner. Against Evil
+    tiles it searches the Evil rule itself instead of averaging over
+    luck.
+  - **🎓 SMART**, **🔁 ALGORITHM**, **📋 PRIORITY**, **🎰 RANDOM** — AJ
+    Richardson's four, ported over the same flat-array engine
+    (`js/honest_ai.js`) and made corner-relative (his chase the
+    top-left): Smart looks three moves ahead against the worst
+    adjacent 2, judged by monotonicity and empty cells; Algorithm
+    alternates up, left, up, left; Priority takes the first legal move
+    of up > left > right > down; Random is a random legal move.
+- **GOAL** — **🏁 MAX BLOCK** or **💯 MAX SCORE**, and for perfect play
+  **🌀 FULL SPIRAL**. Perfect play has an exact answer to each (below);
+  honest play goes as far as it gets, MAX SCORE with GENIUS weighing
+  survival a little more heavily.
+- **SPEED** — **1×–5×, 10×, 20×, 50×, 100×**, **AFAP** (as fast as
+  possible while still drawing every move) or **🧮 HEADLESS**: the
+  renderer is fully off — the *entire* game (thinking, moves, spawn
+  odds, undos) runs as flat arrays inside the Web Worker while the
+  board sits dimmed and frozen. Only the live counters move; the final
+  position installs into the real game at the end (or the moment you
+  stop). Because nothing depends on animation frames, it runs at full
+  speed even in a hidden background tab.
+- **FINALE** (perfect play) — **🎬 SLOW MOTION** plays the ending at a
+  readable pace and holds the pose on the finished spiral;
+  **⚡ HYPERCOMPLETE** just finishes.
+- The mini-board picks the corner for the biggest tile.
+- **Try again** above the board restarts at any time, and the game-over
+  screen has a **Close** button that leaves the dead board on show (Z
+  still takes moves back).
 
-- Pick the target corner (bottom-right by default) on the mini-board.
-- Pick a speed: **1×–5×**, **AFAP** (as fast as possible), or
-  **🧮 HEADLESS** — the renderer is fully off: the *entire* game
-  (planner, moves, spawn odds, undo re-rolls) runs as flat arrays
-  inside the Web Worker while the board sits dimmed and frozen. Only
-  the live counters move; the final position installs into the real
-  game at the end (or the moment you stop). Because nothing depends on
-  animation frames, it runs at full speed even in a hidden background
-  tab, where browsers throttle rendered modes to a crawl.
-- Pick a flavor. All three play the *same computed lines* (the books,
-  below); they differ in how the spawns are made to match.
-  - **🎲 SUPER** — spawns stay honest (90% twos, random cells); every
-    unlucky one gets undone and re-rolled — the opening pair included
-    (two 4s seated in the corner is a one-in-twelve-thousand deal, so
-    the run restarts about 12,000 times before its first move). Exactly
-    32,781 moves and about 1.9 million undos per perfect game, every
-    one of them counted.
-  - **🔮 PREDICTABLE** — the AI decides which tile comes next *and where
-    it lands*: the line's spawn, placed. Exactly 32,781 moves, zero
-    undos, zero luck.
-  - **👑 PERFECT** — the move-minimal game, *computed rather than
-    played*: it always runs as pure matrix data (no rendering — the
-    board dims and holds still until the finished position lands), the
-    game only ever moves forward (**zero undos**), every spawn from the
-    very first two tiles is a 4, and the line is **exactly 32,781
-    moves** — the provable minimum (derivation below). It isn't even
-    searched at runtime: the perfect games are *constants of 2048*, so
-    they were generated once (`test/gen_perfect.js`) and shipped as
-    data (`js/perfect_line.js`) — the 32,781-move line to the tile,
-    the 65,533-move line to the full spiral, and the 129,333-move
-    maximum-score line — replayed, and re-verified move by move,
-    through the real engine in a fraction of a second.
-    The other three corners are the same lines mirrored. The ending
-    still gets eyes on it: the finale replays on the real board in slow
-    motion and holds the pose. And if you'd rather *watch the whole
-    thing*, pick a rendered speed (1×–5× or AFAP) — the book plays out
-    on the visible grid move by move, zero undos, finale in slow
-    motion; 🧮 HEADLESS stays the instant default.
-- The finale always plays out in slow motion. It's the money shot.
+### 🧠 How far honest play gets
 
-And a goal picker:
+`node test/honest.js [algo|all] [games]` plays headless games
+(`TILES=evil`, `UNDO=regular`, `GOAL=score`, `CORNER=…`), and
+`node test/honest_drive.js` drives the same AIs through the real game
+engine — real moves, the real undo button for the death ladder, the
+Evil spawner patched in exactly as the page does it. Ten games each,
+bottom-right corner (max tile reached, average score):
 
-- **🏁 131072 SPRINT** — straight to the tile, 4-feeds, done.
-- **🌀 131072 SPIRAL** — don't stop at the tile: keep building until
+| AI | regular tiles | Evil tiles | regular tiles, undo regular |
+|---|---|---|---|
+| **🧠 GENIUS** | 16384 ×1, 8192 ×5, 4096 ×3, 1024 ×1 — 130,131 | 4096 ×6, 2048 ×4 — 56,850 | **32768 ×2** (2 games, 15,000-move cap) — 455,038 |
+| 🎓 SMART | 4096 ×3, 2048 ×6, 1024 ×1 — 46,029 | 1024 ×4, 512 ×4, 256 ×2 — 8,410 | 16384 ×3, 8192 ×2 (5 games) — 265,873 |
+| 🔁 ALGORITHM | 512 ×5, 256 ×2, 128 ×3 — 4,256 | 256 ×4, 128 ×4, 64 ×2 — 2,011 | 1024 ×6, 512 ×4 — 9,209 |
+| 📋 PRIORITY | 512 ×1, 256 ×6, 128 ×2, 16 ×1 — 2,952 | 128 ×7, 64 ×3 — 1,284 | — |
+| 🎰 RANDOM | 128 ×6, 64 ×3, 32 ×1 — 983 | 128 ×1, 64 ×5, 32 ×4 — 508 | 256 ×9, 512 ×1 — 1,431 |
+
+GENIUS thinks for 5 ms a move on average in Node (about
+200 moves/s; against Evil tiles the tree is narrower and it is
+three times faster), SMART well under a millisecond, the other three
+are instant. Undo regular is where the button shows its worth: the
+same SMART that dies at 4096 climbs to 16384 with a few thousand
+escapes, and GENIUS reaches 32768.
+
+### ⚡ Perfect play
+
+This fork's undo button re-randomizes the spawn seed, which makes
+something delightful possible: an AI that plays a *perfect* game.
+PERFECT tiles, or REGULAR tiles with PERFECT undo, build the perfect
+spiral — 4, 8, 16 … 65536 snaked into your chosen corner — undoing
+every unlucky spawn along the way in the second case (watch the undo
+counter). When the spiral is complete, one final 4 drops into the last
+free cell and the whole chain folds into **131072**, the highest tile
+2048's rules allow.
+
+The two ways play the *same computed lines* — the books, below — and
+differ only in how the spawns are made to match:
+
+- **👑 PERFECT tiles** — the move-minimal game, *computed rather than
+  played*: it runs as pure matrix data by default (HEADLESS — the
+  board dims and holds still until the finished position lands), the
+  game only ever moves forward (**zero undos**), every spawn from the
+  very first two tiles is a 4, and the line is **exactly 32,781
+  moves** — the provable minimum (derivation below). It isn't even
+  searched at runtime: the perfect games are *constants of 2048*, so
+  they were generated once (`test/gen_perfect.js`) and shipped as data
+  (`js/perfect_line.js`) — the 32,781-move line to the tile, the
+  65,533-move line to the full spiral, and the 129,333-move
+  maximum-score line — replayed, and re-verified move by move, through
+  the real engine in a fraction of a second. The other three corners
+  are the same lines mirrored. The ending still gets eyes on it: with
+  🎬 SLOW MOTION the finale replays on the real board in slow motion
+  and holds the pose. And if you'd rather *watch the whole thing*, pick
+  a rendered speed (1×–100× or AFAP) — the book plays out on the
+  visible grid move by move, zero undos.
+- **🎲 REGULAR tiles + ⚡ PERFECT undo** — the same line with honest
+  spawns re-rolled onto it: about 1.9 million undos, the opening pair
+  included.
+
+And the goal picker:
+
+- **🏁 MAX BLOCK** — straight to the 131072 tile, 4-feeds, done.
+- **🌀 FULL SPIRAL** — don't stop at the tile: keep building until
   **every power of two from 131072 down to 4 sits on the board at
   once** — the complete spiral, the prettiest position the game has,
   and a board that is dead by construction (adjacent cells always
   differ). 4-feeds make it the fewest-moves road there: exactly
-  **65,533 moves** in PERFECT mode, ending frozen on the money shot.
+  **65,533 moves**, ending frozen on the money shot.
 - **💯 MAX SCORE** — score is merge history: a spawned 2 is worth 0 and
   every spawned 4 forfeits 4 points. So this run feeds twos, and after
   folding the first spiral into 131072 it *keeps playing*, stacking the
   full descending chain beside it until the board dies full and
   mergeless. The mass-only ceiling is 3,932,156 — but it turns out the
   board's geometry cannot pay it (derivation below): the computed
-  PERFECT line proves **3,925,224 points in 129,333 moves**, 99.82% of
-  the ceiling and the highest constructively verified score here. Same
+  line proves **3,925,224 points in 129,333 moves**, 99.82% of the
+  ceiling and the highest constructively verified score here. Same
   death board as the SPIRAL goal — one final position, reached two
   perfect ways.
 
 The engine (`js/super_ai.js`) plans a line of moves together with the
 spawn each move needs, then either re-rolls reality until it matches
-(super) or simply places the planned tile (predictable). Since the
-perfect games are shipped as data, the line normally *is* the book —
-served in 2,000-move chunks and re-verified against the real game move
-by move — and the checkpoint search over controlled outcomes underneath
-only wakes up for a board that isn't on it (or when no line is shipped
-for the goal; `NOBOOK=1` in the harness forces that, the pre-book
-behaviour). Every state on screen is a real, legal game state reached
-by real moves. All planning runs in a Web Worker
+(perfect undo) or simply places the planned tile (perfect tiles). Since
+the perfect games are shipped as data, the line normally *is* the book
+— served in 2,000-move chunks and re-verified against the real game
+move by move — and the checkpoint search over controlled outcomes
+underneath only wakes up for a board that isn't on it (or when no line
+is shipped for the goal; `NOBOOK=1` in the harness forces that, the
+pre-book behaviour). Every state on screen is a real, legal game state
+reached by real moves. All planning runs in a Web Worker
 (`js/super_worker.js`), one chunk prefetched ahead, so the page stays
 at 60fps.
 
 `node test/run.js [corner]` drives the same engine headless as proof
-(`PREDICTABLE=1` for controlled spawns, `GOAL=spiral|score` for the
-other goals, `NOBOOK=1` to make the planner search the whole game), and
+(`PREDICTABLE=1` for placed spawns, `GOAL=spiral|score` for the other
+goals, `NOBOOK=1` to make the planner search the whole game), and
 `node test/bench.js {standard|undo|perfect}` is a pure-array speed
 benchmark of the three rulesets, searched. The searched rows below were
 measured on one 4-core box, all four executing **simultaneously** (one
@@ -97,11 +166,11 @@ core each); the book rows are the same harness with the shipped lines:
 |---|---|---|---|---|---|---|
 | bench, undo rules (searched) | 131072 | 36,561 | 1,798,095 | 22.9 min | 1376.1s | 0.1s |
 | bench, perfect rules (searched) | 131072 | 36,569 | 0 | 22.7 min | 1364.6s | 0.0s |
-| real engine, predictable (searched) | 131072 | 36,561 | 0 | 23.0 min | — | — |
-| real engine, super (searched) | 131072 | 36,563 | 1,785,117 | 23.0 min | — | — |
-| **real engine, predictable (the book)** | 131072 | **32,781** | **0** | **0.2 s** | 0s | 0.2s |
-| **real engine, super (the book)** | 131072 | **32,781** | **1,912,116** | **7.9 s** | 0s | 7.9s |
-| **real engine, super, max score (the book)** | full chain, score **3,925,224** | **129,333** | 662,805 | 4.0 s | 0s | 4.0s |
+| real engine, placed spawns (searched) | 131072 | 36,561 | 0 | 23.0 min | — | — |
+| real engine, undo re-rolls (searched) | 131072 | 36,563 | 1,785,117 | 23.0 min | — | — |
+| **real engine, placed spawns (the book)** | 131072 | **32,781** | **0** | **0.2 s** | 0s | 0.2s |
+| **real engine, undo re-rolls (the book)** | 131072 | **32,781** | **1,912,116** | **7.9 s** | 0s | 7.9s |
+| **real engine, undo re-rolls, max score (the book)** | full chain, score **3,925,224** | **129,333** | 662,805 | 4.0 s | 0s | 4.0s |
 | **PERFECT (the book)** | 131072 | **32,781** | **0** | **0.1 s** | 0s | 0.1s |
 | **PERFECT SPIRAL (the book)** | full chain, score 3,670,024 | **65,533** | **0** | **0.2 s** | 0s | 0.2s |
 | **PERFECT MAX SCORE (the book)** | full chain, score **3,925,224** | **129,333** | **0** | **0.3 s** | 0s | 0.3s |
@@ -114,11 +183,11 @@ and undo stack); searched, ~99.99% of the time is the planner thinking,
 which is why the undo and perfect rulesets finish in a dead heat, and
 why an honest game — no undo, no control — tops out around 2048:
 perfection needs the re-roll. With the books the planner is gone and
-every flavor is engine-bound. In the browser that means 🧮 HEADLESS
-finishes any flavor in about a tenth of a second (≈230,000 moves/s for
+every perfect run is engine-bound. In the browser that means 🧮
+HEADLESS finishes in about a tenth of a second (≈230,000 moves/s for
 the tile line inside the worker), and a rendered AFAP run is bound by
 the real game plus one paint per frame, ≈2,000 moves/s: 16 s for the
-32,781-move line, 23 s for SUPER with its 1.9 million undos.
+32,781-move line, 23 s with the 1.9 million undos.
 
 ### 👑 The mathematics of a perfect game
 
@@ -159,7 +228,7 @@ move), which is why the planner's own searched lines land ~36,500 (the
 searched rows above): they allow 2s whenever convenient, roughly 8,200
 of them. The books allow none — and because a lone 2 could never merge
 again in an all-4 world, even the two starting tiles must be 4s (which
-is exactly why SUPER has to re-roll its opening).
+is exactly why PERFECT undo has to re-roll its opening).
 
 **The full spiral, fewest moves.** The complete chain — 131072,
 65536, … 4, one power per cell — has mass 2^18 − 4 = 262,140, so an
@@ -197,7 +266,7 @@ verified score for this board; the true minimum n₄ (somewhere between
 So the perfections pull the same lever opposite ways on the same final
 board: **spawn 4s for the fewest moves (65,533, scoring 3,670,024),
 spawn 2s for the most points (3,925,224, in 129,333 moves).** One
-dial, both extremes, and SUPER MODE plays each of them to its bound.
+dial, both extremes, and perfect play takes each of them to its bound.
 
 `PERFECT=1 node test/run.js br bl tr tl` proves the tile line in about
 a tenth of a second per corner: it replays the shipped data through

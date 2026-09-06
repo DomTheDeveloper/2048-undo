@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>2048-undo</title>
+  <title>2048-ai</title>
 
   <link href="style/main.css" rel="stylesheet" type="text/css">
   <link href="style/super.css" rel="stylesheet" type="text/css">
@@ -17,44 +17,73 @@
 <body>
   <div class="container">
     <div class="heading">
-      <h1 class="title">2048-undo</h1>
+      <h1 class="title">2048-ai</h1>
       <div class="scores-container">
         <div class="score-container">0</div>
         <div class="best-container">0</div>
       </div>
     </div>
-    <p class="game-intro">Join the numbers and get to the <strong>2048 tile!</strong></p>
-    <p>Hit 'Z' to <a href="#" onclick="handle_undo()">take back one or more moves</a>.</p>
+    <div class="above-game">
+      <p class="game-intro">Join the numbers and get to the <strong>2048 tile!</strong><br>Hit 'Z' to <a href="#" onclick="handle_undo()">take back one or more moves</a>.</p>
+      <a class="restart-button">Try again</a>
+    </div>
+    <p class="game-credit">AI mod by <a href="https://github.com/DomTheDeveloper" target="_blank">Dom the Developer</a>, <a href="https://github.com/DomTheDeveloper/2048-undo" target="_blank">source</a>.</p>
 
     <div class="super-panel">
       <div class="super-row1">
-        <a class="super-toggle"><span class="super-toggle-label">SUPER MODE</span> ⚡</a>
+        <a class="super-toggle"><span class="super-toggle-label">RUN AI</span> ⚡</a>
         <div class="super-status">plays a perfect game to the 131072 tile, undoing every unlucky spawn</div>
       </div>
-      <div class="super-modes">
-        <a class="super-mode-btn" data-mode="super" title="Honest spawns — every unlucky one undone and re-rolled onto the computed line, the opening pair included">🎲 SUPER <small>undo re-rolls</small></a>
-        <a class="super-mode-btn" data-mode="predictable" title="Decides every next tile and its spot — the computed line's spawns, placed; zero undos">🔮 PREDICTABLE <small>spawns by design</small></a>
-        <a class="super-mode-btn" data-mode="perfect" title="The move-minimal game: all-4 feeding, exactly 32,781 moves to 131072 — the provable minimum">👑 PERFECT <small>32,781 moves</small></a>
+      <div class="super-row" data-row="tiles">
+        <span class="super-label">tiles</span>
+        <a class="super-chip" data-tiles="evil" title="aj-r's Evil generator: every new tile lands where it hurts most — on the edge the last move packed against, beside the biggest neighbours, as a 2 unless the neighbours are 2s">😈 EVIL</a>
+        <a class="super-chip" data-tiles="regular" title="Honest 2048: a random empty cell, 90% twos and 10% fours">🎲 REGULAR</a>
+        <a class="super-chip" data-tiles="perfect" title="The AI places every tile itself — the computed perfect line, zero undos">👑 PERFECT <small>spawns by design</small></a>
       </div>
-      <div class="super-modes super-goals">
-        <a class="super-goal-btn" data-goal="tile" title="Sprint straight to the 131072 tile">🏁 131072 SPRINT</a>
-        <a class="super-goal-btn" data-goal="spiral" title="Build the 131072, then keep going until every power of two sits on the board at once — the full spiral, fewest moves">🌀 131072 SPIRAL <small>65,533 moves</small></a>
-        <a class="super-goal-btn" data-goal="score" title="Keep going past 131072: the full chain fed with 2s. The mass-only ceiling is 3,932,156, but staging geometry forces some 4s — the computed line proves 3,925,224">💯 MAX SCORE <small>3,925,224</small></a>
+      <div class="super-row" data-row="undo">
+        <span class="super-label">undo</span>
+        <a class="super-chip" data-undo="disabled" title="No undo: the run ends when the board dies">🚫 DISABLED</a>
+        <a class="super-chip" data-undo="regular" title="The undo button as a human uses it: only to escape game over, a growing number of moves each time, until the luck runs out">↩️ REGULAR</a>
+        <a class="super-chip" data-undo="perfect" title="The undo button as a superpower: every spawn that is not on the computed perfect line gets undone and re-rolled — about 1.9 million undos to 131072">⚡ PERFECT <small>undo re-rolls</small></a>
+      </div>
+      <div class="super-row" data-row="algo">
+        <span class="super-label">ai</span>
+        <a class="super-chip" data-algo="genius" title="This fork's own: depth-adaptive expectimax over row tables (empties, merges, monotonicity, tile sum, a pull toward your corner) — and it knows the Evil rule when it faces it">🧠 GENIUS</a>
+        <a class="super-chip" data-algo="smart" title="aj-r's Smart: three moves of look-ahead against the worst adjacent 2, judged by monotonicity and empty cells">🎓 SMART</a>
+        <a class="super-chip" data-algo="algorithm" title="aj-r's Algorithm-based: up, left, up, left… (toward your corner), priority order when blocked">🔁 ALGORITHM</a>
+        <a class="super-chip" data-algo="priority" title="aj-r's Priority-based: up > left > right > down (toward your corner)">📋 PRIORITY</a>
+        <a class="super-chip" data-algo="random" title="aj-r's Random: a random legal move">🎰 RANDOM</a>
+      </div>
+      <div class="super-row" data-row="goal">
+        <span class="super-label">goal</span>
+        <a class="super-chip" data-goal="tile" title="The biggest tile the run can make — 131072 for perfect play, as far as the AI gets otherwise">🏁 MAX BLOCK</a>
+        <a class="super-chip" data-goal="score" title="The most points — for perfect play the full chain fed with 2s (3,925,224 in 129,333 moves; the mass-only ceiling of 3,932,156 cannot be paid, see the README), otherwise survive as long as possible">💯 MAX SCORE</a>
+        <a class="super-chip" data-goal="spiral" title="Perfect play only: build the 131072, then keep going until every power of two sits on the board at once — 65,533 moves">🌀 FULL SPIRAL <small>65,533 moves</small></a>
       </div>
       <div class="super-controls">
         <div class="super-speeds">
+          <span class="super-label">speed</span>
           <a class="super-speed" data-speed="1">1×</a>
           <a class="super-speed" data-speed="2">2×</a>
           <a class="super-speed" data-speed="3">3×</a>
           <a class="super-speed" data-speed="4">4×</a>
           <a class="super-speed" data-speed="5">5×</a>
-          <a class="super-speed" data-speed="afap">AFAP</a>
+          <a class="super-speed" data-speed="10">10×</a>
+          <a class="super-speed" data-speed="20">20×</a>
+          <a class="super-speed" data-speed="50">50×</a>
+          <a class="super-speed" data-speed="100">100×</a>
+          <a class="super-speed" data-speed="afap" title="As fast as possible while still drawing every move">AFAP</a>
           <a class="super-speed super-speed-headless" data-speed="headless" title="No rendering: the whole game runs as matrix data in a background worker — full speed even in a hidden tab">🧮 HEADLESS</a>
         </div>
         <div class="super-corner" title="Pick the corner for the biggest tile">
           <div class="super-corner-row"><a class="super-corner-cell" data-corner="tl"></a><a class="super-corner-cell" data-corner="tr"></a></div>
           <div class="super-corner-row"><a class="super-corner-cell" data-corner="bl"></a><a class="super-corner-cell" data-corner="br"></a></div>
         </div>
+      </div>
+      <div class="super-row" data-row="finale">
+        <span class="super-label">finale</span>
+        <a class="super-chip" data-finale="slow" title="The ending plays in slow motion and holds the pose — the money shot">🎬 SLOW MOTION</a>
+        <a class="super-chip" data-finale="hyper" title="No ceremony: finish at the chosen speed and show the result">⚡ HYPERCOMPLETE</a>
       </div>
       <div class="super-hud">
         <span class="super-stat">moves <b class="super-stat-moves">0</b></span>
@@ -80,8 +109,9 @@
       <div class="game-message">
         <p></p>
         <div class="lower">
-	        <a class="keep-playing-button">Keep going</a>
+          <a class="keep-playing-button">Keep going</a>
           <a class="retry-button">Try again</a>
+          <a class="close-message-button">Close</a>
         </div>
       </div>
 
@@ -122,8 +152,12 @@
     </p>
     <hr>
     <p>
-    Original game by <a href="http://gabrielecirulli.com" target="_blank">Gabriele Cirulli.</a> Based on <a href="https://itunes.apple.com/us/app/1024!/id823499224" target="_blank">1024 by Veewo Studio</a> and conceptually similar to <a href="http://asherv.com/threes/" target="_blank">Threes by Asher Vollmer.</a>
-    Undo-mod by <a href="http://quaxio.com/">Alok Menghrajani</a>, <a href="https://github.com/alokmenghrajani/2048">source</a>.
+    Original game by <a href="http://gabrielecirulli.com" target="_blank">Gabriele Cirulli</a>.<br />
+    Based on <a href="https://itunes.apple.com/us/app/1024!/id823499224" target="_blank">1024 by Veewo Studio</a>.<br />
+    Conceptually similar to <a href="http://asherv.com/threes/" target="_blank">Threes by Asher Vollmer</a>.<br />
+    Undo-mod by <a href="http://quaxio.com/" target="_blank">Alok Menghrajani</a>, <a href="https://github.com/alokmenghrajani/2048" target="_blank">source</a>.<br />
+    2048-AI by <a href="https://github.com/DomTheDeveloper" target="_blank">Dom the Developer</a>, <a href="https://github.com/DomTheDeveloper/2048-undo" target="_blank">source</a>.<br />
+    <small>Smart, Algorithm, Priority, Random and the Evil tiles are ported from <a href="https://github.com/aj-r/2048-AI" target="_blank">AJ Richardson's 2048-AI</a>.</small>
     </p>
   </div>
 
@@ -138,6 +172,7 @@
   <script src="js/application.js"></script>
   <script src="js/perfect_line.js"></script>
   <script src="js/super_ai.js"></script>
+  <script src="js/honest_ai.js"></script>
   <script src="js/super_mode.js"></script>
 
 <script>
