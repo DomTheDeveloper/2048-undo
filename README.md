@@ -57,7 +57,13 @@ above the board decide what kind of game that is:
 - **FINALE** (perfect play) — **🎬 SLOW MOTION** plays the ending at a
   readable pace and holds the pose on the finished spiral;
   **⚡ HYPERCOMPLETE** just finishes.
-- The mini-board picks the corner for the biggest tile.
+- The mini-board picks the corner for the biggest tile — and which way
+  the spiral runs out of it: from bottom-right, **⬅ LEFT** (65536
+  beside the 131072, the snake along the rows) or **⬆ UP** (65536 above
+  it, along the columns). The snake is drawn on the mini-board, and
+  clicking the chosen corner again flips it. Eight spirals, all exact:
+  the shipped lines are one line and the seven symmetries of the
+  square (`ORIENT=col` in the harness picks the column-first ones).
 - **Try again** above the board restarts at any time, and the game-over
   screen has a **Close** button that leaves the dead board on show (Z
   still takes moves back).
@@ -268,8 +274,9 @@ board: **spawn 4s for the fewest moves (65,533, scoring 3,670,024),
 spawn 2s for the most points (3,925,224, in 129,333 moves).** One
 dial, both extremes, and perfect play takes each of them to its bound.
 
-`PERFECT=1 node test/run.js br bl tr tl` proves the tile line in about
-a tenth of a second per corner: it replays the shipped data through
+`PERFECT=1 node test/run.js br bl tr tl` (add `ORIENT=col` for the
+column-first spirals) proves the tile line in about a tenth of a
+second per corner: it replays the shipped data through
 the real engine — every slide must actually move, every spawn cell
 must be empty — and asserts exactly 32,781 moves with zero undos.
 `PERFECT=1 GOAL=spiral` does the same for the full spiral: 65,533

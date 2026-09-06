@@ -27,16 +27,29 @@
 
   // Cells in build order for a corner ("tl","tr","bl","br"): S[0] is the
   // corner that ends up holding 131072, S[15] is where the final 4 spawns.
-  // Flat index = y * 4 + x.
-  function snakeCells(corner) {
+  // Flat index = y * 4 + x. The spiral can run either way out of its
+  // corner: orient "row" (default) snakes along the corner's row first
+  // (from bottom-right: 65536 to the LEFT of the 131072), orient "col"
+  // along its column first (65536 ABOVE it) — the transpose.
+  function snakeCells(corner, orient) {
     var cx = (corner === "tr" || corner === "br") ? 3 : 0;
     var cy = (corner === "bl" || corner === "br") ? 3 : 0;
-    var ys = cy === 3 ? [3, 2, 1, 0] : [0, 1, 2, 3];
     var out = [];
-    for (var k = 0; k < 4; k++) {
+    var k, i;
+    if (orient === "col") {
       var xs = cx === 3 ? [3, 2, 1, 0] : [0, 1, 2, 3];
-      if (k % 2 === 1) xs.reverse();
-      for (var i = 0; i < 4; i++) out.push(ys[k] * 4 + xs[i]);
+      for (k = 0; k < 4; k++) {
+        var ys = cy === 3 ? [3, 2, 1, 0] : [0, 1, 2, 3];
+        if (k % 2 === 1) ys.reverse();
+        for (i = 0; i < 4; i++) out.push(ys[i] * 4 + xs[k]);
+      }
+      return out;
+    }
+    var rows = cy === 3 ? [3, 2, 1, 0] : [0, 1, 2, 3];
+    for (k = 0; k < 4; k++) {
+      var cols = cx === 3 ? [3, 2, 1, 0] : [0, 1, 2, 3];
+      if (k % 2 === 1) cols.reverse();
+      for (i = 0; i < 4; i++) out.push(rows[k] * 4 + cols[i]);
     }
     return out;
   }
@@ -728,26 +741,35 @@
     return steps;
   }
 
-  // The book is generated for br; the other corners are its exact
-  // mirror images — reflect cells and swap the mirrored directions.
-  function transformStep(step, corner) {
-    var mx = corner === "bl" || corner === "tl";
-    var my = corner === "tr" || corner === "tl";
+  // The book is generated for br, row-first; the other seven spirals
+  // are its images under the symmetries of the square — reflect cells
+  // and swap the mirrored directions, and for the column-first
+  // orientation transpose (x <-> y, up <-> left, down <-> right). A
+  // transposed corner is its mirror across the diagonal: tr <-> bl.
+  function transformStep(step, corner, orient) {
+    var col = orient === "col";
+    var c = col ? (corner === "tr" ? "bl" : corner === "bl" ? "tr" : corner) : corner;
+    var mx = c === "bl" || c === "tl";
+    var my = c === "tr" || c === "tl";
     var x = step.cell % 4, y = (step.cell / 4) | 0;
     if (mx) x = 3 - x;
     if (my) y = 3 - y;
     var dir = step.dir;
     if (mx && (dir === 1 || dir === 3)) dir = 4 - dir;
     if (my && (dir === 0 || dir === 2)) dir = 2 - dir;
+    if (col) {
+      var t = x; x = y; y = t;
+      dir = dir === 0 ? 3 : dir === 3 ? 0 : dir === 1 ? 2 : 1;
+    }
     return { dir: dir, cell: y * 4 + x, value: step.value };
   }
 
-  function perfectBook(corner, which) {
+  function perfectBook(corner, which, orient) {
     var raw = decodePerfectLine(which);
     if (!raw) return null;
     var steps = new Array(raw.length);
-    for (var i = 0; i < raw.length; i++) steps[i] = transformStep(raw[i], corner);
-    var S = snakeCells(corner);
+    for (var i = 0; i < raw.length; i++) steps[i] = transformStep(raw[i], corner, orient);
+    var S = snakeCells(corner, orient);
     var start = new Array(CELLS);
     for (var c = 0; c < CELLS; c++) start[c] = 0;
     // The score line starts from two 2s (a starting 4 would cost 4
@@ -804,7 +826,8 @@
     // forced 4-spawns, 3,925,224 points). The same ledger gives the
     // known 519 for the 2048 tile.
     this.perfect = !!(opts && opts.perfect);
-    this.S = snakeCells(corner);
+    this.orient = opts && opts.orient === "col" ? "col" : "row";
+    this.S = snakeCells(corner, this.orient);
     // The second act is a fresh sprint on the 15 cells the 131072
     // doesn't occupy: same machine, one cell shorter.
     this.subS = this.S.slice(1);
@@ -908,7 +931,7 @@
   SuperAI.prototype.bookPlan = function (board) {
     if (this.book === false) return null;
     if (this.book === null) {
-      this.book = perfectBook(this.corner, bookFor(this.goal)) || false;
+      this.book = perfectBook(this.corner, bookFor(this.goal), this.orient) || false;
       if (!this.book) return null;
       this.bookPos = 0;
       this.bookKey = this.book.start.join(",");
@@ -1393,10 +1416,11 @@
   // report progress between slices.
   function HeadlessRunner(corner, options) {
     options = options || {};
-    this.S = snakeCells(corner);
     this.ai = new SuperAI(corner, { goal: options.goal,
                                     perfect: options.perfect,
-                                    noBook: options.noBook });
+                                    noBook: options.noBook,
+                                    orient: options.orient });
+    this.S = this.ai.S;
     this.goal = this.ai.goal;
     // Perfect play is forward-only by definition; it never pays the
     // undo trick because it never needs it.

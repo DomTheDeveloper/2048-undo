@@ -27,18 +27,17 @@
       <p class="game-intro">Join the numbers and get to the <strong>2048 tile!</strong><br>Hit 'Z' to <a href="#" onclick="handle_undo()">take back one or more moves</a>.</p>
       <a class="restart-button">Try again</a>
     </div>
-    <p class="game-credit">AI mod by <a href="https://github.com/DomTheDeveloper" target="_blank">Dom the Developer</a>, <a href="https://github.com/DomTheDeveloper/2048-undo" target="_blank">source</a>.</p>
 
     <div class="super-panel">
       <div class="super-row1">
         <a class="super-toggle"><span class="super-toggle-label">RUN AI</span> ⚡</a>
-        <div class="super-status">plays a perfect game to the 131072 tile, undoing every unlucky spawn</div>
+        <div class="super-status"></div>
       </div>
       <div class="super-row" data-row="tiles">
         <span class="super-label">tiles</span>
         <a class="super-chip" data-tiles="evil" title="aj-r's Evil generator: every new tile lands where it hurts most — on the edge the last move packed against, beside the biggest neighbours, as a 2 unless the neighbours are 2s">😈 EVIL</a>
         <a class="super-chip" data-tiles="regular" title="Honest 2048: a random empty cell, 90% twos and 10% fours">🎲 REGULAR</a>
-        <a class="super-chip" data-tiles="perfect" title="The AI places every tile itself — the computed perfect line, zero undos">👑 PERFECT <small>spawns by design</small></a>
+        <a class="super-chip" data-tiles="perfect" title="The AI places every tile itself — the computed perfect line, zero undos">👑 PERFECT</a>
       </div>
       <div class="super-row" data-row="undo">
         <span class="super-label">undo</span>
@@ -75,9 +74,30 @@
           <a class="super-speed" data-speed="afap" title="As fast as possible while still drawing every move">AFAP</a>
           <a class="super-speed super-speed-headless" data-speed="headless" title="No rendering: the whole game runs as matrix data in a background worker — full speed even in a hidden tab">🧮 HEADLESS</a>
         </div>
-        <div class="super-corner" title="Pick the corner for the biggest tile">
-          <div class="super-corner-row"><a class="super-corner-cell" data-corner="tl"></a><a class="super-corner-cell" data-corner="tr"></a></div>
-          <div class="super-corner-row"><a class="super-corner-cell" data-corner="bl"></a><a class="super-corner-cell" data-corner="br"></a></div>
+        <div class="super-corner" title="Pick the corner for the biggest tile — and which way the spiral runs out of it">
+          <div class="super-mini">
+            <a class="super-mini-cell super-corner-cell" data-cell="0" data-corner="tl"></a>
+            <a class="super-mini-cell" data-cell="1"></a>
+            <a class="super-mini-cell" data-cell="2"></a>
+            <a class="super-mini-cell super-corner-cell" data-cell="3" data-corner="tr"></a>
+            <a class="super-mini-cell" data-cell="4"></a>
+            <a class="super-mini-cell" data-cell="5"></a>
+            <a class="super-mini-cell" data-cell="6"></a>
+            <a class="super-mini-cell" data-cell="7"></a>
+            <a class="super-mini-cell" data-cell="8"></a>
+            <a class="super-mini-cell" data-cell="9"></a>
+            <a class="super-mini-cell" data-cell="10"></a>
+            <a class="super-mini-cell" data-cell="11"></a>
+            <a class="super-mini-cell super-corner-cell" data-cell="12" data-corner="bl"></a>
+            <a class="super-mini-cell" data-cell="13"></a>
+            <a class="super-mini-cell" data-cell="14"></a>
+            <a class="super-mini-cell super-corner-cell" data-cell="15" data-corner="br"></a>
+            <svg class="super-mini-path" viewBox="0 0 62 62" aria-hidden="true"><polyline points=""></polyline><circle class="super-mini-head" r="3.5" cx="55" cy="55"></circle></svg>
+          </div>
+          <div class="super-orient">
+            <a class="super-chip super-orient-chip" data-orient="row" title="The spiral runs along the corner's row first: 65536 beside the 131072"></a>
+            <a class="super-chip super-orient-chip" data-orient="col" title="The spiral runs along the corner's column first: 65536 above or below the 131072"></a>
+          </div>
         </div>
       </div>
       <div class="super-row" data-row="finale">

@@ -21,6 +21,7 @@
   var SPEEDS = ["1", "2", "3", "4", "5", "10", "20", "50", "100", "afap", "headless"];
   var FINALES = ["slow", "hyper"];
   var CORNERS = ["tl", "tr", "bl", "br"];
+  var ORIENTS = ["row", "col"];
   var ALGO_NAMES = { genius: "GENIUS", smart: "SMART", algorithm: "ALGORITHM",
                      priority: "PRIORITY", random: "RANDOM" };
   var STALL_DEATHS = 40; // mirrors honest_ai.js
@@ -31,6 +32,7 @@
     dirty: false,
     driver: null,
     corner: null,
+    orient: null,
     speed: null,
     tiles: null,
     undo: null,
@@ -72,6 +74,7 @@
   // SUPER was regular tiles + perfect undo, the others perfect tiles).
   var legacyMode = loadPref("super2048.mode", null);
   controller.corner = pick(loadPref("super2048.corner", "br"), CORNERS, "br");
+  controller.orient = pick(loadPref("super2048.orient", "row"), ORIENTS, "row");
   controller.speed = pick(loadPref("super2048.speed", "afap"), SPEEDS, "afap");
   controller.tiles = pick(loadPref("super2048.tiles",
     legacyMode && legacyMode !== "super" ? "perfect" : "regular"), TILES, "regular");
@@ -237,6 +240,7 @@
       stopRun("error");
     };
     worker.postMessage({ type: "headless", corner: controller.corner,
+                         orient: controller.orient,
                          goal: runGoal(),
                          predictable: controller.tiles === "perfect",
                          perfect: controller.tiles === "perfect",
@@ -268,7 +272,7 @@
     try {
       book = Super.perfectBook(controller.corner,
         controller.goal === "spiral" ? "full"
-      : controller.goal === "score" ? "score" : "tile");
+      : controller.goal === "score" ? "score" : "tile", controller.orient);
     } catch (e) {}
     if (!book || book.steps.length < REPLAY_TAIL) return false;
     var g = gm();
@@ -286,7 +290,7 @@
       b = sim.board;
     }
 
-    var S = Super.snakeCells(controller.corner);
+    var S = Super.snakeCells(controller.corner, controller.orient);
     function primed(bb) {
       if (bb[S[15]] !== 4) return false;
       for (var p = 0; p <= 14; p++) {
@@ -398,6 +402,7 @@
     try {
       controller.worker = new Worker("js/super_worker.js");
       controller.worker.postMessage({ type: "init", corner: controller.corner,
+                                      orient: controller.orient,
                                       goal: runGoal(),
                                       perfect: controller.tiles === "perfect",
                                       honest: honest ? honestConfig() : null });
@@ -445,6 +450,7 @@
       controller.driver = new Super.SuperDriver(g, controller.corner, Tile, {
         predictable: controller.tiles === "perfect",
         perfect: controller.tiles === "perfect",
+        orient: controller.orient,
         goal: runGoal(),
         externalPlanner: !!controller.worker,
         onDeadEnd: function (board) {
@@ -714,8 +720,7 @@
           : controller.goal === "spiral"
           ? (bookOf || "building the FULL spiral — ") + "largest tile " + fmtInt(max)
           : (bookOf || "building the spiral — ") + "largest tile " + fmtInt(max);
-        progress += controller.tiles === "perfect"
-          ? " (spawns by design)" : " (honest spawns, re-rolled)";
+        if (controller.tiles !== "perfect") progress += " (honest spawns, re-rolled)";
       }
       setStatus((thinking ? "thinking… — " : "") + progress);
     }
@@ -772,38 +777,50 @@
         el.getAttribute("data-speed") === controller.speed);
       el.classList.toggle("disabled", false);
     });
-    $all(".super-corner-cell").forEach(function (el) {
-      el.classList.toggle("selected", el.getAttribute("data-corner") === controller.corner);
-      el.classList.toggle("disabled", controller.running);
-    });
-    if (!controller.running && !controller.done) {
-      setStatus(idleStatus());
-    }
+    drawSpiral();
+    if (!controller.running && !controller.done) setStatus("");
   }
 
-  function idleStatus() {
-    if (honestPlay()) {
-      var who = controller.algo === "genius"
-        ? "GENIUS (this fork's expectimax)" : "aj-r's " + ALGO_NAMES[controller.algo];
-      return who + " plays honest 2048 — " + tilesWords() + ", " + undoWords() +
-        " — " + (runGoal() === "score" ? "for the most points" : "for the biggest tile it can");
+  // The spiral picker. Which way the 65536 sits from the 131072 is what
+  // the two chips say, in words that depend on the corner.
+  function orientWords(corner, orient) {
+    var fromLeft = corner === "tl" || corner === "bl";
+    var fromTop = corner === "tl" || corner === "tr";
+    if (orient === "row") return fromLeft ? "➡ RIGHT" : "⬅ LEFT";
+    return fromTop ? "⬇ DOWN" : "⬆ UP";
+  }
+
+  function drawSpiral() {
+    var S = Super.snakeCells(controller.corner, controller.orient);
+    var order = {};
+    var pts = [];
+    for (var i = 0; i < 16; i++) {
+      order[S[i]] = i;
+      pts.push((7 + 16 * (S[i] % 4)) + "," + (7 + 16 * ((S[i] / 4) | 0)));
     }
-    var line = onBook() ? "the computed " + lineMoves() + "-move line, " : "";
-    var how = controller.tiles === "perfect"
-      ? line + "every next tile placed by design — zero undos"
-      : line + "played with honest spawns — every unlucky one undone, " +
-        "the opening pair included";
-    if (controller.goal === "score") {
-      return "maximum-score run to 3,932,156 — " +
-        (controller.tiles === "perfect"
-          ? "the computed 129,333-move line: 2s except the 1,735 geometrically forced 4s"
-          : how);
+    var line = $(".super-mini-path polyline");
+    if (line) line.setAttribute("points", pts.join(" "));
+    var head = $(".super-mini-head");
+    if (head) {
+      head.setAttribute("cx", 7 + 16 * (S[0] % 4));
+      head.setAttribute("cy", 7 + 16 * ((S[0] / 4) | 0));
     }
-    if (controller.goal === "spiral") {
-      return "the FULL spiral — every power of two, 131072 down to 4, at once — " + how;
-    }
-    return (controller.tiles === "perfect"
-      ? "move-minimal game to 131072 — " : "perfect game to 131072 — ") + how;
+    $all(".super-mini-cell").forEach(function (el) {
+      var c = Number(el.getAttribute("data-cell"));
+      el.classList.toggle("selected", c === S[0]);
+      // The cells fade along the snake: brightest at the corner.
+      el.style.background = c === S[0] ? ""
+        : "rgba(246, 94, 59, " + (0.55 - 0.032 * order[c]).toFixed(3) + ")";
+      if (el.classList.contains("super-corner-cell")) {
+        el.classList.toggle("disabled", controller.running);
+      }
+    });
+    $all(".super-orient-chip").forEach(function (el) {
+      var o = el.getAttribute("data-orient");
+      el.textContent = orientWords(controller.corner, o);
+      el.classList.toggle("selected", o === controller.orient);
+      el.classList.toggle("disabled", controller.running);
+    });
   }
 
   // NodeList.forEach polyfill for older browsers, matching the repo's era.
@@ -872,6 +889,7 @@
   function setOption(name, value) {
     if (name === "finale") controller.finaleMode = value;
     else controller[name] = value;
+    if (name === "orient") savePref("super2048.orient", value);
     savePref("super2048." + name, value);
     if (name === "tiles" && value === "perfect") {
       // The instant computed run is PERFECT's default experience;
@@ -889,7 +907,7 @@
       if (controller.running) stopRun("user"); else startRun();
     });
 
-    var OPTION_ATTRS = ["tiles", "undo", "algo", "goal", "finale"];
+    var OPTION_ATTRS = ["tiles", "undo", "algo", "goal", "finale", "orient"];
     $all(".super-chip").forEach(function (el) {
       el.addEventListener("click", function (e) {
         e.preventDefault();
@@ -919,8 +937,15 @@
       el.addEventListener("click", function (e) {
         e.preventDefault();
         if (controller.running) return; // pick before you launch
-        controller.corner = el.getAttribute("data-corner");
-        savePref("super2048.corner", controller.corner);
+        var corner = el.getAttribute("data-corner");
+        if (corner === controller.corner) {
+          // Clicking the chosen corner again flips the spiral.
+          controller.orient = controller.orient === "row" ? "col" : "row";
+          savePref("super2048.orient", controller.orient);
+        } else {
+          controller.corner = corner;
+          savePref("super2048.corner", controller.corner);
+        }
         updateControls();
       });
     });

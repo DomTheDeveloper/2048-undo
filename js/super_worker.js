@@ -61,7 +61,8 @@ onmessage = function (e) {
                                   { goal: msg.goal, tiles: msg.honest.tiles });
     } else {
       ai = new Super2048.SuperAI(msg.corner, { goal: msg.goal,
-                                               perfect: msg.perfect });
+                                               perfect: msg.perfect,
+                                               orient: msg.orient });
     }
   } else if (msg.type === "plan" && ai) {
     var plan = planAndSend(msg.board);
@@ -85,7 +86,8 @@ onmessage = function (e) {
       headless = new Super2048.HeadlessRunner(msg.corner, {
         goal: msg.goal,
         predictable: msg.predictable,
-        perfect: msg.perfect
+        perfect: msg.perfect,
+        orient: msg.orient
       });
     }
     headless.t0 = Date.now();

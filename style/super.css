@@ -147,36 +147,79 @@
   color: #776e65;
 }
 
-/* Corner picker: a miniature board. */
+/* Spiral picker: a miniature board with the snake drawn on it. The
+   four corner cells pick where the 131072 lives; the two chips beside
+   it pick which way the spiral runs out of that corner. */
 .super-corner {
-  display: inline-block;
-  background: rgba(238, 228, 218, 0.2);
-  border-radius: 4px;
-  padding: 4px;
-  line-height: 0;
+  display: -webkit-flex;
+  display: flex;
+  -webkit-align-items: center;
+  align-items: center;
   margin-left: 10px;
 }
 
-.super-corner-row { white-space: nowrap; }
-
-.super-corner-cell {
-  display: inline-block;
-  width: 22px;
-  height: 22px;
-  margin: 2px;
-  border-radius: 3px;
-  background: rgba(238, 228, 218, 0.35);
-  cursor: pointer;
+.super-mini {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, 14px);
+  grid-auto-rows: 14px;
+  gap: 2px;
+  background: rgba(238, 228, 218, 0.2);
+  border-radius: 4px;
+  padding: 4px;
 }
 
-.super-corner-cell:hover { background: rgba(238, 228, 218, 0.6); }
+.super-mini-cell {
+  display: block;
+  border-radius: 2px;
+  background: rgba(238, 228, 218, 0.35);
+}
 
-.super-corner-cell.selected {
+.super-mini-cell.super-corner-cell { cursor: pointer; }
+
+.super-mini-cell.super-corner-cell:hover { background: rgba(238, 228, 218, 0.6); }
+
+.super-mini-cell.selected {
   background: #edc22e;
   box-shadow: inset 0 0 0 2px rgba(119, 110, 101, 0.35);
 }
 
 .super-corner-cell.disabled { cursor: default; opacity: 0.6; }
+
+.super-mini-path {
+  position: absolute;
+  left: 4px;
+  top: 4px;
+  width: 62px;
+  height: 62px;
+  pointer-events: none;
+}
+
+.super-mini-path polyline {
+  fill: none;
+  stroke: #f65e3b;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.9;
+}
+
+.super-mini-path circle { fill: #f65e3b; }
+
+.super-orient {
+  display: -webkit-flex;
+  display: flex;
+  -webkit-flex-direction: column;
+  flex-direction: column;
+  margin-left: 8px;
+}
+
+.super-orient .super-chip {
+  margin: 2px 0;
+  padding: 4px 10px;
+  font-size: 12px;
+  white-space: nowrap;
+}
 
 .super-hud {
   margin-top: 10px;
@@ -361,11 +404,6 @@
 }
 
 .restart-button:hover { background: #9f8b77; }
-
-.game-credit {
-  margin: 8px 0 16px 0;
-  font-size: 14px;
-}
 
 /* The stock message's Close button sits beside Try again. */
 .game-container .game-message a.close-message-button { display: inline-block; }

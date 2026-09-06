@@ -7,6 +7,7 @@
 // board ends with the 131072 tile in the chosen corner. Every flavor
 // plays the shipped line when one exists for the goal; NOBOOK=1 makes
 // the planner search the whole game instead (about 23 minutes a corner).
+// ORIENT=col picks the column-first spiral out of the corner.
 
 "use strict";
 
@@ -49,6 +50,9 @@ function makeGame() {
 }
 
 var Super = require(process.env.SUPER_AI || path.join(root, "js", "super_ai.js"));
+// ORIENT=col runs the spiral along the corner's column instead of its
+// row (the transposed line); default row.
+var ORIENT = process.env.ORIENT === "col" ? "col" : "row";
 
 function fmt(b) {
   var rows = [];
@@ -72,7 +76,7 @@ function runPerfect(corner) {
   var wantMoves = goal === "spiral" ? 65533
                 : goal === "score" ? 129333 : 32781;
   var runner = new Super.HeadlessRunner(corner,
-    { goal: goal, perfect: true, predictable: true });
+    { goal: goal, perfect: true, predictable: true, orient: ORIENT });
   var MAX_MS = (Number(process.env.MAX_MIN) || 70) * 60 * 1000;
   var lastBeat = 0;
   while (!runner.run(1000)) {
@@ -92,7 +96,7 @@ function runPerfect(corner) {
     }
   }
   var b = runner.board;
-  var S = Super.snakeCells(corner);
+  var S = Super.snakeCells(corner, ORIENT);
   var ok;
   if (goal === "spiral") {
     ok = Super.fullChain(b, S) &&
@@ -153,6 +157,7 @@ function runCorner(corner) {
     { verify: true, trace: process.env.TRACE === "1",
       predictable: process.env.PREDICTABLE === "1",
       noBook: process.env.NOBOOK === "1",
+      orient: ORIENT,
       goal: goal });
   driver.attach();
 
@@ -231,7 +236,7 @@ function runCorner(corner) {
         " (moves=" + driver.stats.moves + ")");
       var sb = driver.readBoard();
       console.error(fmt(sb));
-      var S = Super.snakeCells(corner);
+      var S = Super.snakeCells(corner, ORIENT);
       var ra = Super.analyze(sb, S);
       console.error("root phi=" + ra.prefixPhi.toExponential(3) +
         " packed=" + ra.packedLen + " floats=" + ra.floats + " leaked=" + ra.leaked + " stranded=" + ra.stranded);
@@ -316,7 +321,7 @@ function runCorner(corner) {
   }
 
   var b = driver.readBoard();
-  var S = Super.snakeCells(corner);
+  var S = Super.snakeCells(corner, ORIENT);
   var ok;
   if (goal === "score") {
     var dead = true;
