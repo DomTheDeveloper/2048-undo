@@ -1,0 +1,85 @@
+name: Check extremal research and build revised paper
+on:
+  push:
+    branches: [research/extremal-2048]
+    paths: ["research/**", "paper/**", "lean-kernel/Game2048/DeadlineSlack.lean", ".github/workflows/research-check.yml"]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: research-publication-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/research/extremal-2048'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply baseline-checked manuscript revision
+        run: python3 research/polish_manuscript.py
+      - uses: actions/cache/restore@v4
+        with:
+          path: ~/.elan
+          key: lean2048-toolchain-v4.19.0
+      - name: Install pinned Lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -x "$HOME/.elan/bin/lean" ]; then
+            curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          fi
+          "$HOME/.elan/bin/elan" toolchain install leanprover/lean4:v4.19.0
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Reconstruct witnesses, check both engines, rational tests, and Lean deadline lemma
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash research/check.sh | tee research/research-full-check.log
+      - name: Install LaTeX
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends latexmk texlive-latex-extra texlive-pictures texlive-fonts-recommended poppler-utils
+      - name: Build the revised manuscript
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd paper
+          latexmk -pdf -interaction=nonstopmode -halt-on-error -file-line-error main.tex | tee ../research/paper-build.log
+          if grep -E 'undefined references|Citation .* undefined|Reference .* undefined|Overfull \\hbox' main.log; then
+            echo 'Unresolved reference or overflowing manuscript text.' >&2
+            exit 1
+          fi
+          pdfinfo main.pdf | tee ../research/paper-pdfinfo.txt
+          pdftotext main.pdf /tmp/research-paper.txt
+          grep -q 'Mass barriers and certified arrangements' /tmp/research-paper.txt
+          grep -q '1,915,854.958' /tmp/research-paper.txt
+      - name: Commit reproducible outputs on the research branch only
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add README.md paper/main.tex paper/refs.bib paper/deductions.tex paper/main.pdf
+          git add witness/full-chain-opposite-corners.txt witness/full-chain-noncorner.txt
+          git add research/*.json research/*.txt research/*.log
+          if ! git diff --cached --quiet; then
+            git commit -m 'Publish checked arrangement witnesses, mass bounds, deadline audit, and revised manuscript'
+            git push origin HEAD:research/extremal-2048
+          fi
+          mkdir -p publication
+          git rev-parse HEAD > publication/source-commit.txt
+          git archive --format=zip --output=publication/Perfect-2048-Research-Source.zip HEAD
+          cp paper/main.pdf publication/Perfect-2048-Research.pdf
+          cp research/research-full-check.log research/paper-pdfinfo.txt publication/
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: extremal-2048-research-publication
+          path: |
+            publication/
+            research/*.log
+            research/*.json
+            research/*.txt
+            paper/main.log
+          if-no-files-found: error

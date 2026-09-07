@@ -1,0 +1,313 @@
+\section{Mass barriers and certified arrangements}
+\label{sec:deductions}
+
+The certificates can be used as reusable constructions, not merely as
+endpoints of a search. This section resolves two arrangement questions
+posed in the earlier draft, gives a second proof of the extremal bounds,
+and derives policy-independent bounds for honest play. The new
+probability arguments and arrangement certificates are not advertised as
+Lean-formalised; the quantitative deadline lemma below is kernel-checked.
+
+\subsection{Minimum-length full chains beyond corner snakes}
+\label{sec:arrangements}
+
+\begin{theorem}\label{thm:arrangements}
+On standard $4\times4$ 2048, both of the following full-chain arrangements
+are reachable in exactly $65{,}533$ moves, the minimum for their mass:
+\[
+\begin{pmatrix}
+4&8&16&32\\
+64&128&256&512\\
+8192&4096&2048&1024\\
+16384&32768&65536&131072
+\end{pmatrix},\qquad
+\begin{pmatrix}
+4&8&16&32\\
+512&256&128&64\\
+1024&2048&4096&8192\\
+65536&131072&32768&16384
+\end{pmatrix}.
+\]
+In particular, the 4 may occupy the corner opposite the 131072, and the
+131072 need not occupy a corner. The constructions and square symmetries
+give at least $128$ distinct full-chain arrangements at this minimum
+length, and realise the largest tile in each of the twelve boundary cells.
+\end{theorem}
+\begin{proof}[Proof by explicit certificates]
+For the first family, retain the first $65{,}517$ moves of the existing
+full-chain witness and enumerate all legal sixteen-move continuations
+with 4-spawns. The search visits $199$ states, including its starting
+state, and gives eight final arrangements. For the second family, retain
+the first $49{,}166$ moves, append the explicit seventy-move bridge in
+\path{research/noncorner-splice.json}, and resume the reflected suffix
+at move $49{,}236$. At the splice the small tiles agree exactly; the
+already completed 65536 and 131072 have exchanged labels relative to
+the reflected reference. No subsequent merge touches these two tiles.
+
+Both independent rule replayers check all sixteen reconstructed base
+trajectories, including their exact final arrangements.
+The script \path{research/spliced_certificates.py} checks the results
+and counts $128$ distinct images under the eight square symmetries.
+Legality of the images follows from Lemma~\ref{lem:equiv}.
+Every spawn, including the opening, is a 4. The final mass is
+$262140$, so the ledger fixes the move count to $(262140-8)/4=65533$.
+\end{proof}
+
+The two displayed representatives are published as
+\path{witness/full-chain-opposite-corners.txt} and
+\path{witness/full-chain-noncorner.txt}. These settle the two affirmative
+existence questions in the earlier draft, not the complete classification
+of full-chain arrangements. In particular, a full-chain placement of the
+largest tile in one of the four interior cells is not established here.
+
+\paragraph{Why suffix transplantation works.}
+More generally, fix a legal suffix and a threshold $K$ such that every
+merge output in the suffix is at most $K$. Distinct tiles larger than $K$
+are inert. Permuting their labels, while leaving the small tiles and
+occupied cells unchanged, preserves every slide, spawn vacancy, and
+nontriviality check in that suffix. Indeed, decisions to merge depend on
+equality, not numerical ordering: the large labels remain distinct, and
+none can equal a small tile. Induction over the suffix proves the claim.
+This is a reuse principle for checked trajectories, not a substitute for
+establishing reachability of the new starting configuration.
+
+\subsection{Terminal mass barriers}
+\label{sec:barriers}
+
+Write $m=\mass(B)/2$, so each spawned tile increases $m$ by 1 or 2, and
+let $s_2(m)$ be the number of ones in its binary expansion. Throughout
+this subsection $c\ge2$ and the opening consists of two ordinary tiles.
+
+\begin{lemma}\label{lem:barrier}
+A board of $c$ cells whose mass in units of 2 satisfies $s_2(m)=c$ is full,
+has pairwise distinct tiles, and admits no legal move.
+\end{lemma}
+\begin{proof}
+Any representation of $m$ as a sum of powers of two has at least $s_2(m)$
+terms. Combining equal terms until the binary representation is reached
+reduces the term count at each combination. With at most $c=s_2(m)$
+terms initially, no such combination can occur. Thus there are exactly
+$c$ distinct terms. On a full board without equal tiles a slide cannot
+move anything. This argument uses arithmetic carries only to analyse a
+representation; it does not assume those carries are legal board moves.
+\end{proof}
+
+Put
+\[
+H=2^{c+1}-2,\qquad b_j=H+1-2^j\quad(1\le j\le c),\qquad
+A_c(m)=\#\{j:b_j<m\}.
+\]
+The values $b_c<b_{c-1}<\cdots<b_1<H$ all have $c$ binary ones.
+Both $H-1$ and $H$ are terminal barriers. A first crossing above $H$
+would have to start at one of these two values, so no play can exceed
+mass $2H$. Each $b_j$ below the attained mass must be skipped, not visited.
+A skip is possible only by a 4-spawn from $b_j-1$ to $b_j+1$. Distinct
+barriers require distinct skips. Consequently
+\begin{equation}\label{eq:barrierfours}
+\nfour\ge A_c(m).
+\end{equation}
+
+\paragraph{A second proof of the score and length ceilings.}
+Let
+\[
+F(m)=\sum_{r\ge0:\,\text{bit}_r(m)=1}r\,2^{r+1}
+\]
+be the potential of the binary representation of the mass. Arithmetic
+merging can only increase potential, so $\Phichain(B)\le F(m)$, with
+equality precisely when the tile multiset is that binary representation.
+If $r$ is the number of trailing ones in $m$, binary carrying gives
+\[
+F(m+1)-F(m)=4(2^r-1).
+\]
+The function $A_c$ increases only from $b_j$ to $b_j+1$, where $r=j\ge1$.
+Thus $F(m)-4A_c(m)$ is nondecreasing on $0\le m\le H$. By the score
+identity and \eqref{eq:barrierfours},
+\[
+\mathrm{score}\le F(m)-4A_c(m)\le F(H)-4c=\Phi_c-4c.
+\]
+Likewise $m-A_c(m)$ is nondecreasing, and the mass ledger gives
+\[
+T=m-\nfour-2\le m-A_c(m)-2\le H-c-2=2^{c+1}-c-4.
+\]
+This proves the two ceilings without merge-tree scheduling. It does not
+prove geometric attainability of either ceiling on an arbitrary board.
+
+\paragraph{Correct equality cases.}
+The score envelope attains its maximum only at $m\in\{H-2,H-1,H\}$.
+Equality requires the binary representation and $\nfour=A_c(m)$.
+The binary representation at $H-2$ has no tile of value 2 or 4, so it
+cannot be a completed round: the latest spawn is still present as such.
+Hence the score ceiling can occur after a round only on the full chain,
+with $c$ 4-spawns, or on that chain with its 4 replaced by a 2, with
+$c-1$ 4-spawns. Both have $H-c-2$ moves. The earlier draft's full-chain-only
+score equality clause missed the second case. A separately enumerated
+$2\times2$ counterexample scores 180 in 24 moves and ends at
+$\bigl(\begin{smallmatrix}32&8\\16&2\end{smallmatrix}\bigr)$; its complete
+trajectory is in \path{research/2x2-score-equality-counterexample.txt}.
+
+\subsection{A fixed spawn word for the maximum-score conjecture}
+\label{sec:spawnword}
+
+If the full chain is reached with exactly $c$ 4-spawns, every such spawn
+must pay one of the $c$ skips in \eqref{eq:barrierfours}. No other 4-spawn
+is available. This determines the entire sequence of spawn values,
+including the two initial 2s: the 4-spawn skipping $b_j$ occurs at round
+\begin{equation}\label{eq:forcedround}
+t_j=H-2^j-(c-j)-1,\qquad j=c,c-1,\ldots,1.
+\end{equation}
+Indeed, before that spawn the mass in units of 2 is $H-2^j$, and $c-j$
+of the previous spawns were 4s; the number of previous spawns is therefore
+$H-2^j-(c-j)$. Subtracting the two opening spawns gives \eqref{eq:forcedround}.
+For $4\times4$ the sixteen rounds are
+\begin{align*}
+&65533,\ 98300,\ 114683,\ 122874,\ 126969,\ 129016,\ 130039,\ 130550,\\
+&130805,\ 130932,\ 130995,\ 131026,\ 131041,\ 131048,\ 131051,\ 131052.
+\end{align*}
+Every other spawn is a 2. Thus Conjecture~\ref{conj} is equivalent to
+finding \emph{any legal placement-and-direction realisation of this one
+fixed value word}. A legal realisation has mass $2H$ and $c$ 4-spawns,
+and therefore automatically attains the score and length ceilings.
+Conversely, a ceiling-scoring game ending with a 2 can have only that
+last spawn changed to a 4. This is an exact reduction of the remaining
+geometric task, not its solution.
+
+\subsection{Policy-independent probability bounds}
+\label{sec:massprob}
+
+Let a spawn be a 4 with probability $p$ and a 2 with probability $q=1-p$,
+independently, including the opening. The bounds below concern \emph{one}
+ordinary game, with no undo or restarts, under any policy for choosing
+moves. Pre-sample an infinite sequence of spawn values. Geometry may
+stop play earlier but cannot let it cross a visited terminal mass barrier.
+
+For a random walk with increments 1 and 2 of probabilities $q$ and $p$,
+the probability $u_d$ of ever visiting $d$, starting at 0, satisfies
+$u_0=1$, $u_1=q$, and $u_d=qu_{d-1}+pu_{d-2}$. Solving gives
+\[
+u_d=\frac{1-(-p)^{d+1}}{1+p}.
+\]
+Skipping the first barrier $b_c=2^c-1$ has probability $p u_{2^c-2}$.
+After a skip the next necessary pre-skip mass is $2^j-2$ units farther
+on, for $j=c-1,\ldots,1$. Independence of future increments yields:
+
+\begin{theorem}\label{thm:massprob}
+For every move policy on a $c$-cell board,
+\begin{align}
+\Pr(\text{reach }2^{c+1})
+ &\le \frac{p}{1+p}\bigl(1+p^{2^c-1}\bigr),\label{eq:tileprob}\\
+\Pr(\text{reach the full chain})
+ &\le \prod_{j=1}^{c}\frac{p}{1+p}\bigl(1+p^{2^j-1}\bigr).
+ \label{eq:chainprob}
+\end{align}
+These are exact crossing probabilities for the mass-only relaxation,
+not exact optimal probabilities for geometric 2048.
+\end{theorem}
+
+For the ordinary $4\times4$ game, \eqref{eq:tileprob} is
+$(1+10^{-65535})/11<0.09091$, and \eqref{eq:chainprob} is approximately
+$2.396314654\cdot10^{-17}$. The tiny positive correction in
+\eqref{eq:tileprob} must not be dropped when stating a strict upper bound.
+These bounds leave a wide gap to the probability of a particular witness.
+
+\paragraph{Tracking the number of 4-spawns.}
+Introduce the polynomial
+\[
+P_d(z)=\sum_{f=0}^{\lfloor d/2\rfloor}
+ \binom{d-f}{f}q^{d-2f}(pz)^f,
+\qquad
+G_c(z)=\prod_{j=1}^{c} pz\,P_{2^j-2}(z).
+\]
+A composition of $d$ into increments 1 and 2 with $f$ size-2 increments has $d-f$
+increments and can be ordered in $\binom{d-f}{f}$ ways. Hence
+$[z^f]G_c(z)$ is the exact mass-only crossing probability with $f$
+4-spawns, and an upper bound for a geometric full-chain play with that
+count. This supplies a joint score--length probability envelope because
+on the chain $\mathrm{score}=\Phi_c-4f$ and $T=H-f-2$.
+The coefficient of $z^c$ is
+$p^c q^{2^{c+1}-2c-2}$. Allowing either final spawn gives the necessary
+value-word probability
+$p^{c-1}q^{2^{c+1}-2c-2}$ for score-ceiling attainment.
+The latter expression, the score formula, and the $131052$-move figure
+already appear in Rip\`a's 2014 analysis \cite{ripa2014,ripaoeis2014};
+we do not claim those formulas as new. Here their role is a necessary,
+policy-independent bound, not an assumption that the needed geometry
+can always be realised. The polynomial calculation is checked against
+an independent exact rational dynamic program for $2\le c\le6$ by
+\path{research/mass_barriers.py}.
+
+\subsection{A computable upper bound on optimal expected score}
+\label{sec:massbellman}
+
+There is also a Bellman relaxation with only $H+1$ scalar mass states.
+Stop the increment walk at its first mass with $c$ binary ones. Define
+\[
+W(m)=
+\begin{cases}
+F(m),&s_2(m)=c,\\
+qW(m+1)+p\bigl(W(m+2)-4\bigr),&s_2(m)<c,
+\end{cases}
+\qquad 0\le m\le H.
+\]
+All successors used in the second case are at most $H$. This backward
+recurrence exactly computes the expected terminal binary potential minus
+four times the number of future 4-spawns in the relaxation.
+
+To justify it as an upper bound, at spawn index $n$ let $m_n$ be the
+mass and $f_n$ the number of 4-spawns, and put $R_n=F(m_n)-4f_n$.
+The actual score is at most $R_n$. Moreover $R_n$ is nondecreasing:
+a 2-spawn changes it by $F(m+1)-F(m)\ge0$, and a 4-spawn changes it by
+$F(m+2)-F(m)-4\ge0$. The real game cannot continue beyond the walk's
+first terminal barrier. Extending the pre-sampled walk after an earlier
+geometric loss therefore still gives an upper bound. In particular,
+for an ordinary random opening,
+\[
+\sup_\pi\mathbb E_\pi[\mathrm{score}]\le W(0).
+\]
+From an already given board $B$ of mass $m$ in units of 2, the analogous
+upper bound on future score is $W(m)-\Phichain(B)$.
+A second recurrence $J(m)=1+qJ(m+1)+pJ(m+2)$, with zero boundary values,
+bounds the expected game length by $J(0)-2$.
+
+For $c=16$, outward-rounded decimal evaluation gives
+\begin{align*}
+\sup_\pi\mathbb E_\pi[\mathrm{score}]&<1{,}915{,}854.958,\\
+\sup_\pi\mathbb E_\pi[T]&<62{,}412.330.
+\end{align*}
+For comparison the four-cell score relaxation is $69.814912\ldots$,
+above the exact geometric $2\times2$ value in Table~\ref{tab:honest}.
+These are bounds, not strong solutions. The script
+\path{research/mass_interval.py} uses fifty-digit arithmetic rounded
+outwards at every operation and records enclosing intervals; a separate
+forward computation checks the values numerically.
+
+\subsection{Near-optimum rigidity and deadline probabilities}
+\label{sec:slack}
+
+If a $4\times4$ play reaches 131072 at round $T=32781+d$, inspect its
+prefix ending fifteen moves earlier. The threshold-mass lemma requires
+at least 131072 mass there. If $z$ is the number of 2-spawns in that
+prefix, excluding the opening, and $M_0$ is the opening mass, the ledger
+therefore gives
+\[
+2z+(8-M_0)\le4d.
+\]
+The left side also counts the opening 2s, at a charge of two mass units
+each. Thus among the first $32768+d$ spawns, including the opening,
+there can be at most $2d$ twos. The deterministic prefix inequality,
+its general-target version, and the zero-slack consequence are
+kernel-checked in \texttt{Game2048/DeadlineSlack.lean}.
+
+Pre-sampling values again gives a bound for \emph{any} policy reaching
+the tile by the deadline:
+\[
+\Pr_\pi(T_{131072}\le32781+d)
+\le \sum_{z=0}^{\min(2d,32768+d)}
+ \binom{32768+d}{z}(0.9)^z(0.1)^{32768+d-z}.
+\]
+For an earlier hit the required mass has already been acquired by the
+specified prefix, so the same necessary event applies. At $d=0$ this
+is $10^{-32768}$. For deadlines $40000$, $50000$, and $55000$, the
+base-ten logarithms of the upper bounds are approximately
+$-14854.03$, $-3668.61$, and $-909.55$. These are spawn-value bounds;
+requiring suitable locations can only decrease the success probability.
+The stochastic corollary is not separately formalised in Lean.
