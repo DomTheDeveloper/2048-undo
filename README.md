@@ -13,6 +13,20 @@ and independently replayed constructions. Universal mass gateways give
 policy-independent probability bounds and constrain the unresolved maximum-
 score search. The unrestricted 4×4 score ceiling is still not attained here.
 
+### State-space research
+
+The [audited state-space package](research/state-space/README.md) provides human
+proofs, exact inverse-slide rules, independent integer counters, and reproducible
+enumeration. It bounds the continued 4×4 game by **22,851,583,961,907,351,152 labeled
+boards** or **2,856,448,098,561,271,997 symmetry classes**. These are upper bounds,
+not the exact reachable-state count. It also corrects the score theorem's equality
+clause: the final 4 can be replaced by a 2 without changing the score. The new
+state-space arguments do not extend the Lean claims below.
+
+```sh
+bash research/state-space/run.sh --large
+```
+
 ### Lean-verified exact move counts
 
 **131072 is reachable in exactly 32,781 moves, and no legal game from any
