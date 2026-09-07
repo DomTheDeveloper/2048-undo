@@ -1,0 +1,49 @@
+name: Recover saved research for final review
+on:
+  push:
+    branches: [research/extremal-deductions]
+    paths: [.github/workflows/research-final-recovery.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Recover exact saved sources without changing the branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import base64, hashlib, io, json, os, pathlib, subprocess, tarfile, urllib.request, zipfile
+          shas = ['b2eef0e0b69f0f26728e326689e09333472ecd87',
+                  '20f9801e8a3f1bad6c69d2b36774caca6674cf20',
+                  'd3e07bd98b968bb1abefc2a9c0c0014d709b6261',
+                  '72e9d30cf6395b0500d3b4e872bfc61c847bfacd',
+                  'a76e6dba11b32fea1de7ab611ecd42c0d285e750']
+          parts = []
+          for sha in shas:
+              req = urllib.request.Request('https://api.github.com/repos/DomTheDeveloper/2048-undo/git/blobs/' + sha,
+                  headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json'})
+              with urllib.request.urlopen(req, timeout=60) as f:
+                  parts.append(base64.b64decode(json.load(f)['content']))
+          raw = b''.join(parts)
+          assert hashlib.sha256(raw).hexdigest() == '1e279ad095a3a7e742c25d52073346b692c19549f418a1d4fbe340f9526df05a'
+          if not pathlib.Path('research/DEDUCTIONS.md').exists():
+              with tarfile.open(fileobj=io.BytesIO(raw)) as t:
+                  t.extractall('.', filter='data')
+              subprocess.run(['git', 'apply', '--check', 'research/manuscript.patch'], check=True)
+              subprocess.run(['git', 'apply', 'research/manuscript.patch'], check=True)
+          with zipfile.ZipFile('/tmp/recovered-research.zip', 'w', zipfile.ZIP_DEFLATED) as z:
+              for p in pathlib.Path('.').rglob('*'):
+                  if p.is_file() and '.git' not in p.parts:
+                      z.write(p, p.as_posix())
+          print('Saved research recovered; no verification or publication claim is made by this recovery job.')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: recovered-research-source
+          path: /tmp/recovered-research.zip
+          retention-days: 7
