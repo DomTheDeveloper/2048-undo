@@ -1,0 +1,49 @@
+{
+  "witness": "witness/131072.txt",
+  "sha256": "4f49c437f0946f17b6afb9c4c97c62ef1a44ee7595ad75888d3806c3291afe9e",
+  "moves": 32781,
+  "first_131072": 32781,
+  "score": 1966092,
+  "spawned_2s": 8,
+  "spawned_4s": 32775,
+  "final_board": [
+    4,
+    2,
+    4,
+    2,
+    2,
+    4,
+    8,
+    4,
+    4,
+    2,
+    4,
+    2,
+    2,
+    0,
+    0,
+    131072
+  ],
+  "chunks": 258,
+  "chunk_size": 128,
+  "kernel_transition_checks": 32781,
+  "axioms": {
+    "Game2048.Cert131072.certified_play": [],
+    "Game2048.reachable_131072": [],
+    "Game2048.standard2048_exact_131072": [
+      "propext",
+      "Quot.sound"
+    ],
+    "Game2048.standard2048_two_twos_exact": [
+      "propext",
+      "Quot.sound"
+    ]
+  },
+  "kernel_checked": true,
+  "negative_kernel_test": "rejected fabricated transition",
+  "lean_version": "Lean (version 4.19.0, x86_64-unknown-linux-gnu, commit 6caaee842e94, Release)",
+  "two_twos_minimum_moves": 32782,
+  "verified_commit": "03ca3d181640a2c2a7685efc3ead4ff932d925e4",
+  "github_actions_run": 34094095435,
+  "github_actions_artifact": 10008288267
+}

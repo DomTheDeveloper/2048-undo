@@ -1,0 +1,165 @@
+\subsection{Kernel-checked reachability and optimality in Lean}\label{sec:lean}
+
+The independent replayers in Section~\ref{sec:certificate} check a concrete
+trajectory. We additionally formalise its legality and its minimum length
+in Lean~4 \cite{demoura2021lean4}. The development in
+\texttt{lean-kernel/} uses Lean~4.19.0 and its standard library, without
+Mathlib. The lower bound is proved directly for the same slide-and-spawn
+semantics used to check the witness; no connection to an abstract
+merge-tree model is assumed.
+
+\paragraph{Formal rules and quantifiers.}
+A \texttt{Board} has four rows of four natural-number values, and each
+coordinate type has exactly four constructors. A row slide removes zeros,
+merges equal adjacent inputs from the moving edge, and pads with zeros.
+The evaluator is proved to satisfy a separate declarative
+\texttt{PairMerge} relation: a newly produced tile is an output, not an
+input to another merge in that slide. The row-length lemma ensures that
+padding discards no tile. Reversal and transposition implement all four
+whole-board directions. Separate lemmas prove exact mass conservation
+under a slide and exact mass increase by the spawned value under a round.
+
+The function \texttt{step} accepts a direction and a spawn only if the
+slide changes the board, the spawn cell is empty after the slide, and the
+spawn value is 2 or 4. One tile is then inserted. The inductive relation
+\texttt{Plays}\,$a\,T\,b$ means exactly $T$ such rounds from $a$ to $b$.
+The predicate \texttt{IsInitial} allows any two distinct cells and either
+permitted value in each. There is no undo, restart, deletion, selective
+row move, or arbitrary board edit in this relation. As elsewhere in this
+paper, continuation after obtaining the 2048 tile is allowed, and the
+count includes the mandatory spawn after the final slide.
+
+\begin{theorem}[Lean-certified exact move counts]\label{thm:leanexact}
+For standard $4\times4$ 2048 under possible play:
+\begin{enumerate}[nosep,label=(\alph*)]
+\item Some ordinary two-tile opening admits a legal trajectory to
+$131072$ of length $32{,}781$, and every trajectory to $131072$ from
+any ordinary opening has length at least $32{,}781$.
+\item When both opening tiles are required to be 2s, some such opening
+admits a trajectory of length $32{,}782$, and every trajectory to
+$131072$ from any such opening has length at least $32{,}782$.
+\end{enumerate}
+These are minima over permitted openings and legal spawn sequences, not
+a claim that every initial placement attains the same minimum or that a
+player can force those spawns.
+\end{theorem}
+
+The named Lean theorems are:
+\begin{quote}\small\ttfamily
+Game2048.standard2048\_exact\_131072\\
+Game2048.standard2048\_two\_twos\_exact
+\end{quote}
+Their statements conjoin an
+existential legal trajectory with a universal lower bound over all legal
+trajectories, rather than asserting only that a replay program returned
+\texttt{true}.
+
+\paragraph{The lower bound without ancestry bookkeeping.}
+For a board $B$ and a nonnegative threshold $k$, put
+\[
+ H_k(B)=\sum_{x:\,B(x)>k}B(x).
+\]
+For each slide $S$, the formal development proves
+\begin{equation}\label{eq:leanheavy}
+ H_{2k}(S(B))\le H_k(B).
+\end{equation}
+An unmerged tile counted on the left was already counted on the right.
+A merged tile $v+v$ exceeds $2k$ precisely when each input exceeds $k$.
+No input can participate in another merge during that slide. For $k\ge2$
+a new 2 or 4 contributes nothing above $2k$, so
+\eqref{eq:leanheavy} also holds for a complete round.
+
+Define $\operatorname{cutoff}(j)=2^{j+1}$. Iteration over the last $j$
+rounds of a trajectory of length $T\ge j$ gives
+\[
+ H_{\operatorname{cutoff}(j)}(B_T)
+ \le H_2(B_{T-j})
+ \le \mass(B_{T-j})
+ \le M_0+4(T-j).
+\]
+If $B_T$ contains $131072$, take $j=15$, whose cutoff is $65536$.
+With $M_0\le8$ this gives $T\ge32{,}781$; with two initial 2s,
+$M_0\le4$ gives $T\ge32{,}782$. The Lean proof handles $T<15$ as
+well: iteration through all $T$ rounds bounds
+$H_{\operatorname{cutoff}(T)}(B_T)$ by $H_2(B_0)\le8$, contradicting
+the target tile. The general theorem \path{Plays.target_deadline}
+expresses the resulting target-versus-time inequality. The development
+also proves the power-of-two lower bound on the fixed $4\times4$ board
+for ranks at least four and the $519$-round lower bound for 2048.
+It does not assert attainment for arbitrary target sizes or board shapes.
+
+\paragraph{The constructive half.}
+The input is the unchanged plaintext \texttt{witness/131072.txt}.
+An untrusted Python generator proposes the intermediate boards and emits
+32,781 individual transition proofs using \texttt{decide +kernel}.
+Each proof checks the actual \texttt{step} function, including nontrivial
+movement and spawn legality. The resulting plays are composed into
+258 blocks in 17 generated modules, then into a single trajectory.
+The kernel checks both the ordinary opening and the occurrence of 131072
+in the terminal board. Thus correctness of the Python generator, the AI,
+and the JavaScript engine is not an assumption of the Lean theorem.
+
+For the two-2s case, put the two 2s at $(3,2)$ and $(3,3)$, with
+zero-based coordinates. One right slide merges them at $(3,3)$, followed
+by a 4-spawn at $(3,2)$. The resulting board is exactly the two-4s opening
+of the existing certificate. Lean verifies this extra round and composes
+it with the original play. The derived plaintext witness is
+\texttt{witness/131072-two-twos.txt}. The first construction, together
+with the direct lower bound, proves part~(a) of
+Theorem~\ref{thm:leanexact}; the one-round extension and the stronger
+opening-mass bound prove part~(b).
+
+\paragraph{Audit and reproducibility.}
+The original complete kernel audit passed at proof commit
+\href{https://github.com/DomTheDeveloper/2048-undo/commit/86bd902861306f43a5697edcf86ccd3f96028aef}{\texttt{86bd902}}; the supplementary
+results are recorded at \href{https://github.com/DomTheDeveloper/2048-undo/commit/03ca3d181640a2c2a7685efc3ead4ff932d925e4}{\texttt{03ca3d1}}
+\cite{lean2048artifact2026}. A subsequent complete CI rebuild at that
+supplemented commit passed as run
+\href{https://github.com/DomTheDeveloper/2048-undo/actions/runs/34094095435}{\texttt{34094095435}}, checking both exact-optimum theorems.
+The files \texttt{AUDIT.md} and
+\texttt{COROLLARIES.md} in \texttt{lean-kernel/} record the provenance.
+The original witness has SHA-256
+\begin{center}\footnotesize\ttfamily
+4f49c437f0946f17b6afb9c4c97c62ef\\
+1a44ee7595ad75888d3806c3291afe9e
+\end{center}
+(the two displayed lines are concatenated). From the repository root,
+\begin{quote}\ttfamily
+bash lean-kernel/check.sh
+\end{quote}
+rebuilds the proof from source, regenerates the concrete transition proofs,
+checks the supplementary results, and audits the theorem dependencies.
+The completed core audit reports:
+\begin{quote}\footnotesize
+\begin{verbatim}
+Game2048.Cert131072.certified_play: no axioms
+Game2048.reachable_131072: no axioms
+Game2048.standard2048_exact_131072:
+  [propext, Quot.sound]
+\end{verbatim}
+\end{quote}
+The two-2s exact theorem likewise uses only
+\texttt{propext} and \texttt{Quot.sound}. These are standard foundational
+axioms of Lean, not hypotheses about 2048. The build rejects unfinished
+proofs and nonstandard axioms, and it does not use native evaluation as a
+proof oracle. Kernel reduction, the axiom audit, and review of the
+formal statement serve different purposes \cite{leanvalidation2026}.
+Regression examples test non-chaining merges and invalid spawns; a
+negative test requires the kernel to reject a fabricated legal move on an
+empty board. The source hash identifies the witness but is not a
+substitute for checking its transitions.
+
+\paragraph{Scope of the formal claim.}
+The Lean result is the fixed-$4\times4$ reachability and exact minimum
+round count, together with the supporting rule and mass lemmas just
+described. It does not formalise the paper's largest-tile upper bound,
+score ceiling, longest-game bound, primed-board classification, symmetry
+orbit, general-dimensional claims, or optimal stochastic policy.
+In particular, neither failure of the naive snake strategy nor success
+of this certificate proves or disproves general rectangular-board
+attainability. Every prescribed finite spawn sequence has positive
+probability under the usual random rules, but the probability measure
+itself is not formalised here. As in any proof-assistant development,
+trust in the logic and kernel and review that the formal definitions
+express the intended game remain separate from execution of the searcher.
+We make no unconditional historical-priority claim for this formalisation.
