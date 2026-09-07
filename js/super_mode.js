@@ -13,7 +13,7 @@
 
   var Super = window.Super2048;
   var BASE_MPS = 8; // moves per second at 1x
-  var BUILD = "5";  // bump with index.html's ?v= so browsers refetch the scripts
+  var BUILD = "6";  // bump with index.html's ?v= so browsers refetch the scripts
 
   var TILES = ["evil", "regular", "perfect"];
   var UNDOS = ["disabled", "regular", "perfect"];
@@ -80,7 +80,7 @@
     legacyMode && legacyMode !== "super" ? "perfect" : "regular"), TILES, "regular");
   controller.undo = pick(loadPref("super2048.undo", "perfect"), UNDOS, "perfect");
   controller.algo = pick(loadPref("super2048.algo", "genius"), ALGOS, "genius");
-  controller.goal = pick(loadPref("super2048.goal", "tile"), GOALS, "tile");
+  controller.goal = pick(loadPref("super2048.goal", "spiral"), GOALS, "spiral");
   controller.finaleMode = pick(loadPref("super2048.finale", "slow"), FINALES, "slow");
 
   // What kind of run the selection describes. Perfect play is the

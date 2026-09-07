@@ -3,27 +3,22 @@
 .super-panel {
   background: #bbada0;
   border-radius: 6px;
-  padding: 12px 14px;
+  padding: 16px 16px 14px 16px;
   margin-bottom: 18px;
   color: #f9f6f2;
 }
 
-.super-row1 {
-  display: -webkit-flex;
-  display: flex;
-  -webkit-align-items: center;
-  align-items: center;
-  -webkit-justify-content: space-between;
-  justify-content: space-between;
-}
+.super-row1 { text-align: center; }
 
 .super-toggle {
   display: inline-block;
   background: #8f7a66;
-  border-radius: 3px;
-  padding: 8px 16px;
+  border-radius: 4px;
+  padding: 12px 38px;
   color: #f9f6f2;
+  font-size: 20px;
   font-weight: bold;
+  letter-spacing: 0.08em;
   cursor: pointer;
   text-decoration: none;
   white-space: nowrap;
@@ -43,11 +38,51 @@
   to   { box-shadow: 0 0 14px rgba(243, 215, 116, 0.95); }
 }
 
-/* The name is longer than "2048"; keep it on one line beside the
-   score boxes. */
+/* Centred chrome: the name over the two score boxes, the button row
+   under them, everything on the page's midline. */
+.heading {
+  text-align: center;
+  margin-bottom: 10px;
+}
+
 h1.title {
-  font-size: 44px;
-  line-height: 66px;
+  float: none;
+  display: block;
+  font-size: 46px;
+  line-height: 1.1;
+  letter-spacing: -0.5px;
+  margin: 0 0 14px 0;
+}
+
+.scores-container {
+  float: none;
+  text-align: center;
+}
+
+.score-container, .best-container { margin-top: 0; }
+
+.above-game {
+  display: block;
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.restart-button {
+  display: inline-block;
+  margin: 0;
+  float: none;
+}
+
+.game-explanation,
+.container > hr + p {
+  text-align: center;
+}
+
+.container > hr {
+  border: none;
+  border-top: 1px solid rgba(187, 173, 160, 0.5);
+  margin: 24px auto;
+  max-width: 340px;
 }
 
 /* Option rows: a fixed label column and a set of chips that share the
@@ -113,7 +148,15 @@ h1.title {
 /* The pickers: a 2x2 corner grid says where the 131072 lives; two 4x4
    spiral grids draw both snakes out of that corner and you click the
    one you want. Fixed sizes — nothing here changes shape. */
-.super-pickers { margin-top: 10px; }
+.super-pickers {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(238, 228, 218, 0.25);
+  -webkit-justify-content: center;
+  justify-content: center;
+}
+
+.super-pickers .super-label { -webkit-flex: 0 0 auto; flex: 0 0 auto; margin-right: 8px; }
 
 .super-label-spiral { margin-left: 14px; }
 
@@ -205,16 +248,16 @@ h1.title {
 .super-mini-path circle { fill: #f65e3b; }
 
 .super-hud {
-  margin-top: 10px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(238, 228, 218, 0.25);
   font-size: 13px;
-  display: -webkit-flex;
-  display: flex;
-  -webkit-flex-wrap: wrap;
-  flex-wrap: wrap;
+  text-align: center;
 }
 
 .super-hud .super-stat {
-  margin-right: 18px;
+  display: inline-block;
+  margin: 0 12px;
   white-space: nowrap;
 }
 
@@ -347,28 +390,14 @@ h1.title {
   transition: opacity 0.4s ease, filter 0.4s ease;
 }
 
-/* Above the board: the intro on the left, a Try again button on the
-   right (the stock message's Try again lives inside the overlay; this
-   one is always there). */
-.above-game {
-  display: -webkit-flex;
-  display: flex;
-  -webkit-align-items: center;
-  align-items: center;
-  -webkit-justify-content: space-between;
-  justify-content: space-between;
-}
-
-.above-game .game-intro { margin: 0; }
-
+/* Above the board: a centred Try again button (the stock message's
+   own Try again lives inside the overlay; this one is always there). */
 .restart-button {
-  display: inline-block;
   background: #8f7a66;
-  border-radius: 3px;
-  padding: 0 20px;
+  border-radius: 4px;
+  padding: 0 22px;
   height: 40px;
   line-height: 42px;
-  margin-left: 12px;
   color: #f9f6f2;
   font-weight: bold;
   text-decoration: none;
