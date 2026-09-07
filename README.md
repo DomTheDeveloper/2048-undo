@@ -1,6 +1,20 @@
 # 2048 Superintelligence
 A small clone of [1024](https://play.google.com/store/apps/details?id=com.veewo.a1024), based on [Saming's 2048](http://saming.fr/p/2048/) (also a clone), with Alok Menghrajani's undo mod — and an AI panel on top. [Play it here!](https://domthedeveloper.github.io/2048-undo/)
 
+### State-space research
+
+The [audited state-space package](research/state-space/README.md) provides human
+proofs, exact inverse-slide rules, independent integer counters, and reproducible
+enumeration. It bounds the continued 4×4 game by **22,851,583,961,907,351,152 labeled
+boards** or **2,856,448,098,561,271,997 symmetry classes**. These are upper bounds,
+not the exact reachable-state count. It also corrects the score theorem's equality
+clause: the final 4 can be replaced by a 2 without changing the score. The new
+state-space arguments do not extend the Lean claims below.
+
+```sh
+bash research/state-space/run.sh --large
+```
+
 ### Lean-verified exact move counts
 
 **131072 is reachable in exactly 32,781 moves, and no legal game from any
