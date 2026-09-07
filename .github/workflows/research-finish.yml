@@ -1,0 +1,101 @@
+name: Finish and publish the consolidated 2048 research
+on:
+  push:
+    branches: [research/extremal-deductions]
+    paths: [.github/workflows/research-finish.yml]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: finish-2048-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  finish:
+    if: github.ref == 'refs/heads/research/extremal-deductions'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Recover the saved extension and the independently checked sibling sources
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64,hashlib,io,json,os,pathlib,subprocess,tarfile,urllib.request
+          if not pathlib.Path('research/DEDUCTIONS.md').exists():
+              parts=[]
+              for sha in ['b2eef0e0b69f0f26728e326689e09333472ecd87','20f9801e8a3f1bad6c69d2b36774caca6674cf20','d3e07bd98b968bb1abefc2a9c0c0014d709b6261','72e9d30cf6395b0500d3b4e872bfc61c847bfacd','a76e6dba11b32fea1de7ab611ecd42c0d285e750']:
+                  req=urllib.request.Request('https://api.github.com/repos/DomTheDeveloper/2048-undo/git/blobs/'+sha,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json'})
+                  with urllib.request.urlopen(req,timeout=60) as f: parts.append(base64.b64decode(json.load(f)['content']))
+              raw=b''.join(parts)
+              assert hashlib.sha256(raw).hexdigest()=='1e279ad095a3a7e742c25d52073346b692c19549f418a1d4fbe340f9526df05a'
+              with tarfile.open(fileobj=io.BytesIO(raw)) as t: t.extractall('.',filter='data')
+              subprocess.run(['git','apply','--check','research/manuscript.patch'],check=True)
+              subprocess.run(['git','apply','research/manuscript.patch'],check=True)
+          PY
+          if [ ! -f research/FINAL_REVIEW.md ]; then
+            git fetch --depth=1 origin 08eb0ddd1f3cb45409cffc12006177e8de0d193a
+            mkdir -p .review-sibling
+            git archive 08eb0ddd1f3cb45409cffc12006177e8de0d193a paper research lean-kernel/Game2048/DeadlineSlack.lean | tar -xf - -C .review-sibling
+            python3 research/final_review_patch.py
+          fi
+      - name: Reproduce the finite checks and match all formal inputs to the completed local audit
+        run: |
+          set -euo pipefail
+          mkdir -p research/results
+          bash research/finish.sh --computations-only | tee research/results/publication-checks.log
+          python3 - <<'PY'
+          import hashlib,json,pathlib
+          root=pathlib.Path('.')
+          report=json.loads((root/'research/audit/completed-local-20260907.json').read_text())
+          assert report['kernel_checked'] is True
+          for name,digest in report['source_sha256'].items():
+              assert hashlib.sha256((root/name).read_bytes()).hexdigest()==digest, 'Formal source mismatch: '+name
+          arrangements=json.loads((root/'research/results/combined-arrangements.json').read_text())
+          assert arrangements['distinct_labeled_endpoints']==320
+          report.update(labeled_chain_endpoints=320,chain_endpoint_orbits=40,
+              publication_source_match=True,publication_ci_kernel_rebuild=False,
+              publication_scope='Fresh independent finite checks; exact formal source identity with the completed local full Lean rebuild. This publication job is not a second kernel rebuild.')
+          (root/'research/audit/final-verification.json').write_text(json.dumps(report,indent=2)+'\n')
+          print('All formal inputs are byte-identical to the completed fresh local kernel audit.')
+          PY
+      - name: Install LaTeX and rebuild the polished paper
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends latexmk texlive-latex-extra texlive-pictures texlive-fonts-recommended poppler-utils
+          cd paper
+          latexmk -pdf -interaction=nonstopmode -halt-on-error -file-line-error main.tex
+          if grep -E 'undefined references|Citation .* undefined|Reference .* undefined|Overfull \\hbox' main.log; then exit 1; fi
+          pdfinfo main.pdf | tee ../research/results/paper-pdfinfo.txt
+          pdftotext main.pdf /tmp/final-paper.txt
+          grep -q '320' /tmp/final-paper.txt
+          grep -q '131102' /tmp/final-paper.txt
+          grep -q 'Every-opening joint optimum' /tmp/final-paper.txt
+      - name: Commit the finished source and permanent evidence on the research branch
+        run: |
+          set -euo pipefail
+          rm -rf .review-sibling
+          rm -f research/manuscript.patch
+          git rm -f --ignore-unmatch .github/workflows/research-final-recovery.yml .github/workflows/extremal-package.yml .github/workflows/extremal-publication.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add README.md paper/main.tex paper/deductions.tex paper/refs.bib paper/main.pdf research/ lean-kernel/Game2048/ witness/
+          if ! git diff --cached --quiet; then
+            git commit -m 'Finish every-opening Lean optima, 320 chain arrangements, stochastic deductions, and polished paper'
+            git push origin HEAD:research/extremal-deductions
+          fi
+          mkdir -p publication
+          git rev-parse HEAD > publication/source-commit.txt
+          git archive --format=zip --output=publication/Perfect-2048-Final-Research.zip HEAD paper lean-kernel research witness verify test js README.md STATE_SPACE.md
+          cp paper/main.pdf publication/Perfect-2048-Final.pdf
+          cp research/audit/final-verification.json publication/
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: final-2048-research
+          path: |
+            publication/
+            research/results/publication-checks.log
+            paper/main.log
+          if-no-files-found: error

@@ -1,6 +1,18 @@
 # 2048 Superintelligence
 A small clone of [1024](https://play.google.com/store/apps/details?id=com.veewo.a1024), based on [Saming's 2048](http://saming.fr/p/2048/) (also a clone), with Alok Menghrajani's undo mod — and an AI panel on top. [Play it here!](https://domthedeveloper.github.io/2048-undo/)
 
+### Further extremal results (research revision)
+
+The new [research note](research/DEDUCTIONS.md) and expanded paper prove the
+opening-dependent optimum for **all 480 ordinary openings**, jointly attain
+the minimum target-board mass **131102**, determine the largest score in a
+fastest game (**1,966,216**), and supply at least **320** optimal full-chain
+arrangements, including a 4 diagonally opposite 131072. The all-opening and
+mass results are checked in Lean; the other additions have written proofs
+and independently replayed constructions. Universal mass gateways give
+policy-independent probability bounds and constrain the unresolved maximum-
+score search. The unrestricted 4×4 score ceiling is still not attained here.
+
 ### State-space research
 
 The [audited state-space package](research/state-space/README.md) provides human
@@ -308,8 +320,10 @@ sit on, which leaves the tile 2^k exactly k−1 cells. So each of the
 sixteen owns a spawned 4, and **score ≤ 3,932,164 − 64 = 3,932,100** on
 any 16-cell board. The same argument gives Φ_c − 4c on c cells, and
 exhaustive enumeration (`node test/solve.js 2x2|2x3|2x4|3x3`) shows it
-is attained on every board up to nine cells — always on the full chain,
-always with exactly one 4 per tile. The shipped 4×4 line, generated
+is attained on the enumerated boards through ten cells, including 2×5.
+Equality permits the full chain with one 4-birth per tile, or the same
+chain with its final 4 replaced by a 2 and one fewer 4-birth; the final
+spawn itself changes no score. The shipped 4×4 line, generated
 under a strict last-resort-4 discipline, lands at **1,735 four-spawns**:
 **129,333 moves** and **3,925,224 points**, pinned by the identities
 moves = 131,068 − n₄ and score = 3,932,164 − 4·n₄ and verified by full
@@ -478,3 +492,17 @@ You can find the same information in the [contributing guide.](https://github.co
 
 ## Donations
 I made this in my spare time, and it's hosted on GitHub (which means I don't have any hosting costs), but if you enjoyed the game and feel like buying me coffee, you can donate at my BTC address: `1Ec6onfsQmoP9kkL3zkpB6c5sA4PVcXU2i`. Thank you very much!
+
+### Completed broader research
+
+The expanded [paper](paper/main.pdf) and [research summary](research/DEDUCTIONS.md)
+now distinguish kernel-checked all-opening joint time–mass optima,
+written and independently replayed restricted score optima, and 320
+distinct minimum-length full-chain endpoints in 40 symmetry orbits.
+The largest tile can finish in every boundary cell. Interior placement
+and the unrestricted 4x4 maximum-score conjecture remain unresolved.
+
+Run `bash research/finish.sh` for the complete consolidated rebuild.
+The `--computations-only` option does not claim a fresh Lean audit.
+Historical numerical score, length, and rare-value-word formulas are
+credited to Marco Ripà (2014) in the paper.

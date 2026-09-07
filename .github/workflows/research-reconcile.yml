@@ -1,0 +1,85 @@
+name: Reconcile completed research with concurrent state-space additions
+on:
+  push:
+    branches: [research/extremal-deductions]
+    paths: [.github/workflows/research-reconcile.yml]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  reconcile:
+    if: github.ref == 'refs/heads/research/extremal-deductions'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Merge the reviewed base revision without losing either development
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          other=f0425ae88b86f66b8ae348436411dc9fb497154e
+          git fetch origin "$other"
+          git merge --no-commit --no-ff "$other" || test -f .git/MERGE_HEAD
+          python3 - <<'PY'
+          import json,hashlib,pathlib,subprocess
+          other='f0425ae88b86f66b8ae348436411dc9fb497154e'
+          conflicts=subprocess.check_output(['git','diff','--name-only','--diff-filter=U'],text=True).splitlines()
+          allowed={'paper/main.tex','paper/main.pdf','README.md'}
+          assert set(conflicts)<=allowed, conflicts
+          for name in conflicts:
+              subprocess.run(['git','checkout','--ours','--',name],check=True)
+          p=pathlib.Path('paper/main.tex');s=p.read_text()
+          if '\\input{state-space}' not in s:
+              marker='\\bibliographystyle{plain}'
+              assert s.count(marker)==1
+              s=s.replace(marker,'\\fussy\n\\input{state-space}\n\n'+marker)
+              p.write_text(s)
+          p=pathlib.Path('README.md');s=p.read_text()
+          if '### State-space research' not in s:
+              old=subprocess.check_output(['git','show',other+':README.md'],text=True)
+              a=old.index('### State-space research');b=old.index('### Lean-verified exact move counts',a)
+              marker='### Lean-verified exact move counts';assert s.count(marker)==1
+              p.write_text(s.replace(marker,old[a:b]+marker))
+          for name in ['paper/main.tex','README.md']:
+              text=pathlib.Path(name).read_text()
+              assert not any(line.startswith(('<<<<<<<','=======','>>>>>>>')) for line in text.splitlines()),name
+          report=json.loads(pathlib.Path('research/audit/completed-local-20260907.json').read_text())
+          for name,h in report['source_sha256'].items():
+              assert hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest()==h,name
+          print('Both research developments preserved; formal inputs unchanged.')
+          PY
+          git add paper/main.tex paper/main.pdf README.md
+          git diff --exit-code "$other" -- STATE_SPACE.md paper/state-space.tex research/state-space .github/workflows/state-space-ci.yml
+      - name: Rebuild and inspect combined manuscript
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends latexmk texlive-latex-extra texlive-pictures texlive-fonts-recommended poppler-utils
+          cd paper
+          latexmk -pdf -interaction=nonstopmode -halt-on-error -file-line-error main.tex
+          if grep -E 'undefined references|Citation .* undefined|Reference .* undefined|Overfull \\hbox' main.log; then exit 1; fi
+          pdfinfo main.pdf
+          pdftotext main.pdf /tmp/combined.txt
+          grep -q 'Every-opening joint optimum' /tmp/combined.txt
+          grep -q '320' /tmp/combined.txt
+      - name: Commit combined result on the research branch only
+        run: |
+          set -euo pipefail
+          git add paper/main.pdf
+          git commit -m 'Preserve state-space additions alongside the completed every-opening and extremal results'
+          git push origin HEAD:research/extremal-deductions
+          mkdir -p publication
+          git rev-parse HEAD > publication/source-commit.txt
+          git archive --format=zip --output=publication/Perfect-2048-Consolidated-Source.zip HEAD paper lean-kernel research witness verify test js README.md STATE_SPACE.md
+          cp paper/main.pdf publication/Perfect-2048-Consolidated.pdf
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: consolidated-2048-publication
+          path: |
+            publication/
+            paper/main.log
+          if-no-files-found: error
