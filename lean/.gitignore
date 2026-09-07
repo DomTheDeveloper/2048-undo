@@ -1,0 +1,6 @@
+*.olean
+*.ilean
+*.log
+Generated/
+Game2048/Generated/
+verification.json

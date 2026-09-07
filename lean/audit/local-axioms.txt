@@ -1,0 +1,22 @@
+Lean (version 4.19.0, x86_64-unknown-linux-gnu, commit 6caaee842e94, Release)
+
+All 32781 transitions, 258 generated proof segments, their composition,
+and Game2048/Main.lean compiled successfully in the local runtime.
+Witness SHA-256: 4f49c437f0946f17b6afb9c4c97c62ef1a44ee7595ad75888d3806c3291afe9e
+
+'Game2048.Cert131072.certified_play' does not depend on any axioms
+'Game2048.reachable_131072' does not depend on any axioms
+'Game2048.standard2048_exact_131072' depends on axioms: [propext, Quot.sound]
+'Game2048.lower_bound_131072' depends on axioms: [propext, Quot.sound]
+'Game2048.lower_bound_2048' depends on axioms: [propext, Quot.sound]
+
+Additional specification checks:
+'Game2048.merge_spec' depends on axioms: [propext, Quot.sound]
+'Game2048.Board.slide_mass_eq' depends on axioms: [propext, Quot.sound]
+'Game2048.step_mass_exact' depends on axioms: [propext, Quot.sound]
+
+RulesTests.lean compiled successfully.
+The occupied-cell tampering test was rejected by Lean as expected.
+
+This records the completed local run, not an assertion about any later CI run.
+Reproduce everything with: bash lean/run.sh

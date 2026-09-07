@@ -1,0 +1,57 @@
+name: Verified 2048 exact optimum
+on:
+  push:
+    branches: [proof/lean-131072-verified]
+  pull_request:
+    paths: ["lean/**", "witness/131072.txt", ".github/workflows/lean-2048-verified.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: lean2048-verified-v4.19.0
+      - name: Install Lean 4.19.0
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -x "$HOME/.elan/bin/lean" ]; then
+            curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain leanprover/lean4:v4.19.0
+          fi
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Compile complete proof, audit axioms, and reject tampering
+        run: bash lean/run.sh
+        env:
+          LEAN_JOBS: 2
+      - name: Check completion manifest
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          x = json.loads(Path('lean/verification.json').read_text())
+          assert x['kernel_checked'] is True
+          assert x['moves'] == 32781
+          assert x['sha256'] == '4f49c437f0946f17b6afb9c4c97c62ef1a44ee7595ad75888d3806c3291afe9e'
+          print('COMPLETE: all witness transitions and the universal lower bound are kernel checked.')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lean2048-verified-proof-and-audit
+          path: |
+            lean/Game2048/**/*.lean
+            lean/Game2048/*.lean
+            lean/*.py
+            lean/*.sh
+            lean/*.md
+            lean/*.log
+            lean/verification.json
+            lean/lean-toolchain
+            witness/131072.txt
+          if-no-files-found: error
