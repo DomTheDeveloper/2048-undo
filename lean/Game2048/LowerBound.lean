@@ -1,12 +1,11 @@
-import Std
-import Std.Tactic
+import Mathlib
 
 namespace Game2048
 
 /--
 Source ids encode the only tiles that can enter a standard game:
 0 and 1 are the two initial tiles; source k+2 is the tile spawned
-at the end of move k+1.  Thus at most c+2 distinct sources exist
+at the end of move k+1. Thus at most c+2 distinct sources exist
 by move c.
 -/
 def sourceTime (source : Nat) : Nat :=
@@ -15,9 +14,7 @@ def sourceTime (source : Nat) : Nat :=
 theorem source_lt_time_add_two (source : Nat) :
     source < sourceTime source + 2 := by
   unfold sourceTime
-  split
-  · omega
-  · omega
+  split <;> omega
 
 /-- The ancestry of one tile. Internal nodes record the move on which the merge occurred. -/
 inductive MergeTree where
@@ -42,13 +39,13 @@ def sources : MergeTree → Finset Nat
 /--
 A valid ancestry uses only spawned 2/4 leaves; merges equal-valued children;
 a child must exist strictly before the move that merges it; and the two
-children have disjoint source tiles.  Geometry is deliberately omitted,
+children have disjoint source tiles. Geometry is deliberately omitted,
 so this is a relaxation of standard 2048: every actual tile history is valid
 here, while some histories admitted here may be geometrically impossible.
 -/
 inductive Valid : MergeTree → Prop where
-  | leaf (source rank : Nat) (hrank : rank = 1 ∨ rank = 2) :
-      Valid (.leaf source rank)
+  | leaf (source r : Nat) (hrank : r = 1 ∨ r = 2) :
+      Valid (.leaf source r)
   | merge (time : Nat) (left right : MergeTree)
       (hl : Valid left) (hr : Valid right)
       (heq : left.rank = right.rank)
@@ -60,7 +57,7 @@ inductive Valid : MergeTree → Prop where
 private theorem rank_pos {tr : MergeTree} (h : tr.Valid) : 0 < tr.rank := by
   induction h with
   | leaf source r hrank =>
-      rcases hrank with rfl | rfl <;> decide
+      rcases hrank with rfl | rfl <;> simp [rank]
   | merge time l r hl hr heq hlt hrt hdisj ihl ihr =>
       simp [rank]
 
@@ -72,7 +69,9 @@ theorem value_le_four_mul_sources {tr : MergeTree} (h : tr.Valid) :
       rcases hrank with rfl | rfl <;> simp [rank, sources]
   | merge time l r hl hr heq hlt hrt hdisj ihl ihr =>
       have ihr' : 2 ^ l.rank ≤ 4 * r.sources.card := by
-        simpa [heq] using ihr
+        calc
+          2 ^ l.rank = 2 ^ r.rank := by rw [heq]
+          _ ≤ 4 * r.sources.card := ihr
       have hcard : (l.sources ∪ r.sources).card = l.sources.card + r.sources.card :=
         Finset.card_union_of_disjoint hdisj
       simp only [rank, sources, Nat.pow_succ]
@@ -81,7 +80,7 @@ theorem value_le_four_mul_sources {tr : MergeTree} (h : tr.Valid) :
 
 /--
 Causality: every source leaf of a rank-r tile was born early enough to
-survive r-2 successive doublings.  This is the formal "one doubling per
+survive r-2 successive doublings. This is the formal "one doubling per
 move" part of the paper's minimum-move argument.
 -/
 theorem source_delay {tr : MergeTree} (h : tr.Valid) :
@@ -89,7 +88,7 @@ theorem source_delay {tr : MergeTree} (h : tr.Valid) :
   induction h with
   | leaf source r hrank =>
       intro s hs
-      simp [sources] at hs
+      have hs' : s = source := by simpa [sources] using hs
       subst s
       rcases hrank with rfl | rfl <;> simp [rank, createdAt]
   | merge time l r hl hr heq hlt hrt hdisj ihl ihr =>
@@ -111,7 +110,7 @@ theorem rank17_sources_subset {tr : MergeTree} (h : tr.Valid)
     (hrank : tr.rank = 17) :
     tr.sources ⊆ Finset.range (tr.createdAt - 15 + 2) := by
   intro s hs
-  have hd := h.source_delay s hs
+  have hd := source_delay h s hs
   rw [hrank] at hd
   have htime : sourceTime s ≤ tr.createdAt - 15 := by omega
   apply Finset.mem_range.mpr
@@ -122,10 +121,10 @@ theorem rank17_sources_subset {tr : MergeTree} (h : tr.Valid)
 theorem rank17_minimum_moves {tr : MergeTree} (h : tr.Valid)
     (hrank : tr.rank = 17) :
     32781 ≤ tr.createdAt := by
-  have hvalue := h.value_le_four_mul_sources
+  have hvalue := value_le_four_mul_sources h
   rw [hrank] at hvalue
   norm_num at hvalue
-  have hsub := h.rank17_sources_subset hrank
+  have hsub := rank17_sources_subset h hrank
   have hcard := Finset.card_le_card hsub
   simp only [Finset.card_range] at hcard
   omega
