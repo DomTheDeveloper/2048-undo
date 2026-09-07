@@ -1,0 +1,39 @@
+name: Lean offline debugging kit
+on:
+  push:
+    branches: [proof/lean-131072]
+    paths: ['.github/workflows/lean-offline-kit.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  kit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache/restore@v4
+        with:
+          path: ~/.elan
+          key: lean2048-toolchain-v4.19.0
+      - name: Export the public pinned toolchain and current proof sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -x "$HOME/.elan/bin/lean" ]; then
+            curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain leanprover/lean4:v4.19.0
+          fi
+          "$HOME/.elan/bin/lean" --version
+          TC="$HOME/.elan/toolchains/leanprover--lean4---v4.19.0"
+          tar --exclude='*.a' --exclude='*.ilean' --exclude='*.c' -C "$TC" -cf - bin/lean lib/lean | zstd -T2 -3 -o lean419-offline.tar.zst
+          tar -czf proof-source.tar.gz lean witness/131072.txt
+          sha256sum lean419-offline.tar.zst proof-source.tar.gz > kit-sha256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lean419-offline-kit
+          path: |
+            lean419-offline.tar.zst
+            proof-source.tar.gz
+            kit-sha256.txt
+          retention-days: 1
+          compression-level: 0
