@@ -1,6 +1,33 @@
 # 2048 Superintelligence
 A small clone of [1024](https://play.google.com/store/apps/details?id=com.veewo.a1024), based on [Saming's 2048](http://saming.fr/p/2048/) (also a clone), with Alok Menghrajani's undo mod — and an AI panel on top. [Play it here!](https://domthedeveloper.github.io/2048-undo/)
 
+### Lean-verified exact move counts
+
+**131072 is reachable in exactly 32,781 moves, and no legal game from any
+ordinary two-tile opening can reach it sooner. With two initial 2s, the
+exact minimum is 32,782.** These are existential optima over legal spawn
+sequences, not guaranteed wins against random spawns.
+
+The complete fixed-4×4 proofs are in [`lean-kernel/`](lean-kernel/README.md).
+The [paper](paper/main.pdf) integrates them in Section 6.5, including the
+formal rules, the direct threshold-mass lower bound, and the axiom audit.
+
+```sh
+bash lean-kernel/check.sh
+python3 verify/verify2048.py witness/131072-two-twos.txt
+```
+
+The rebuild uses pinned **Lean 4.19.0**, Python 3, and no Mathlib.
+Every one of the original 32,781 transitions is checked in the kernel;
+the two-2s theorem prepends one additional checked move. The reachability
+theorem has no axiom dependencies. Both exact-optimum theorems use only
+Lean's standard `propext` and `Quot.sound`, with no unfinished proofs,
+custom axioms, or native-evaluation proof oracle. See the
+[completed audit](lean-kernel/AUDIT.md) and
+[supplementary results](lean-kernel/COROLLARIES.md).
+The score, longest-game, and arbitrary-board claims elsewhere in this
+README are **not** part of this formalization.
+
 ### 🤖 The AI panel
 
 Hit **RUN AI** and the AI plays the board in front of you. The rows
@@ -108,8 +135,9 @@ differ only in how the spawns are made to match:
 - **👑 PERFECT tiles** — the move-minimal game, *computed rather than
   played*: it runs as pure matrix data by default (HEADLESS — the
   board dims and holds still until the finished position lands), the
-  game only ever moves forward (**zero undos**), every spawn from the
-  very first two tiles is a 4, and the line is **exactly 32,781
+  game only ever moves forward (**zero undos**), every spawn through the
+  primed-board construction is a 4 (the final fifteen moves may spawn
+  2s), and the line is **exactly 32,781
   moves** — the provable minimum (derivation below). It isn't even
   searched at runtime: the perfect games are *constants of 2048*, so
   they were generated once (`test/gen_perfect.js`) and shipped as data
@@ -356,7 +384,7 @@ that was doubted in 2014 and called open in 2017 — whether a legal 4×4
 game can reach 131072 at all — with a certificate rather than an
 argument (Das and Paul's 2018 induction claims it for every board, but
 embeds a small board in a larger one as if slides did not move whole
-lines; a uniform construction with a proven invariant is open).
+lines; this work does not claim to verify the general construction).
 `node test/gen_witness.js` regenerates the witnesses from the shipped
 data.
 
@@ -369,9 +397,9 @@ strip with the same eight cells (optimal expected score 2,953 vs
 2,642; a 512 tile with 6.3% vs 2.5%). Boxes of any dimension work
 (`2x2x2x2` would be 16 cells, i.e. out of reach).
 `PERFECT=1 node test/run.js br bl tr tl` (add `ORIENT=col` for the
-column-first spirals) proves the tile line in about a tenth of a
+column-first spirals) checks the tile line in about a tenth of a
 second per corner: it replays the shipped data through
-the real engine — every slide must actually move, every spawn cell
+the headless runner — every slide must actually move, every spawn cell
 must be empty — and asserts exactly 32,781 moves with zero undos.
 `PERFECT=1 GOAL=spiral` does the same for the full spiral: 65,533
 moves, zero undos, the exact chain, score exactly 3,670,024. And
@@ -401,7 +429,7 @@ Evolutionarily Optimizing AI for 2048](https://arxiv.org/abs/2510.20205),
 and the community derivations of the
 maximum score (e.g. [Ask
 MetaFilter](https://ask.metafilter.com/269599/In-a-2048-or-Threes-like-game-what-is-the-highest-possible-score)).
-The write-up with proofs is `paper/main.pdf` — the theorems above, the
+The write-up with proofs is [paper/main.pdf](paper/main.pdf) — the theorems above, the
 algorithm that computed the lines and what is proved about its output,
 and the final spiral drawn in all eight orientations (`paper/figs.tex`
 is generated from the engine's snake tables by `node test/gen_figs.js`).

@@ -1,0 +1,4 @@
+'Game2048.reachable_131072' does not depend on any axioms
+'Game2048.standard2048_exact_131072' depends on axioms: [propext, Quot.sound]
+'Game2048.standard2048_two_twos_exact' depends on axioms: [propext, Quot.sound]
+'Game2048.standard2048_exact_131072' depends on axioms: [propext, Quot.sound]
