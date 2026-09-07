@@ -1,0 +1,72 @@
+{
+  "checkpoint_move": 65517,
+  "total_moves": 65533,
+  "all_spawns": 4,
+  "visited_states": 199,
+  "layer_counts": [
+    3,
+    2,
+    3,
+    10,
+    19,
+    20,
+    29,
+    33,
+    26,
+    6,
+    3,
+    10,
+    14,
+    6,
+    6,
+    8
+  ],
+  "distinct_endings": 8,
+  "distinct_symmetry_images": 64
+}
+corner 0: both independent checkers VALID
+corner 1: both independent checkers VALID
+corner 2: both independent checkers VALID
+corner 3: both independent checkers VALID
+corner 4: both independent checkers VALID
+corner 5: both independent checkers VALID
+corner 6: both independent checkers VALID
+corner 7: both independent checkers VALID
+noncorner 0: both independent checkers VALID
+noncorner 1: both independent checkers VALID
+noncorner 2: both independent checkers VALID
+noncorner 3: both independent checkers VALID
+noncorner 4: both independent checkers VALID
+noncorner 5: both independent checkers VALID
+noncorner 6: both independent checkers VALID
+noncorner 7: both independent checkers VALID
+ALL CHECKS PASSED: 16 base games; 128 distinct symmetry images.
+{
+  "raw_reachable_states": 662,
+  "maximum_score": 180,
+  "moves": 24,
+  "spawned_fours": 3,
+  "final_board": [
+    32,
+    8,
+    16,
+    2
+  ],
+  "old_full_chain_only_equality_clause": "false"
+}
+Steps verified:      24
+Illegal moves:       0
+Illegal spawns:      0
+Spawned 2s / 4s:     23 / 3   (the two starting tiles included)
+Score:               180
+Final board:
+      32      8
+      16      2
+Final maximum tile:  32
+Game over:           yes, no move changes the board
+Certificate:         VALID
+Lean (version 4.19.0, x86_64-unknown-linux-gnu, commit 6caaee842e94, Release)
+'Game2048.deadline_slack_131072' depends on axioms: [propext, Quot.sound]
+'Game2048.optimal_opening_and_prefix' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Game2048.target_prefix_budget' depends on axioms: [propext, Quot.sound]
+RESEARCH CHECKS PASSED. New stochastic results remain conventional, not Lean-formalised.

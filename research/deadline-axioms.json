@@ -1,0 +1,15 @@
+{
+  "Game2048.deadline_slack_131072": [
+    "propext",
+    "Quot.sound"
+  ],
+  "Game2048.optimal_opening_and_prefix": [
+    "propext",
+    "Classical.choice",
+    "Quot.sound"
+  ],
+  "Game2048.target_prefix_budget": [
+    "propext",
+    "Quot.sound"
+  ]
+}

@@ -1,0 +1,2 @@
+'Game2048.Board.slide_mass_eq' depends on axioms: [propext, Quot.sound]
+'Game2048.step_mass_exact' depends on axioms: [propext, Quot.sound]

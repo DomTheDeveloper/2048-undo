@@ -1,0 +1,2 @@
+'Game2048.lower_bound_131072' depends on axioms: [propext, Quot.sound]
+'Game2048.lower_bound_2048' depends on axioms: [propext, Quot.sound]

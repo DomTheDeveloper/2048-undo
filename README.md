@@ -28,6 +28,35 @@ custom axioms, or native-evaluation proof oracle. See the
 The score, longest-game, and arbitrary-board claims elsewhere in this
 README are **not** part of this formalization.
 
+### Further deductions and checked constructions
+
+The research extension supplies **128 distinct minimum-length full-chain
+arrangements**, including a **4 opposite 131072** and a **noncorner 131072**.
+The largest tile is realised at all twelve boundary cells. This is not a
+complete classification; interior placements in a full chain remain open here.
+Two representative plain witnesses are `witness/full-chain-opposite-corners.txt`
+and `witness/full-chain-noncorner.txt`, both **65,533 legal rounds**.
+
+A mass-only stochastic relaxation gives policy-independent bounds for a
+single honest game: probability of the top tile at most
+`(1 + 10^(-65535))/11`, full-chain probability below `2.397e-17`, optimal
+expected score below **1,915,854.958**, and expected length below
+**62,412.330 rounds**. These are upper bounds, not a strong solution.
+The paper includes complete derivations and a spawn-count generating function.
+
+The new kernel-checked deadline lemma says that a game finishing within
+`d` rounds of the 32,781 optimum has at most `2d` early 2-spawns,
+including the opening, before its final fifteen rounds. The probability
+corollaries and arrangement enumeration are not separately Lean-formalised.
+
+An audit corrected the old score equality clause: a full chain whose last
+4 is replaced by a 2 can attain exactly the same score and length. The
+score formula, the 131,052 figure, and the rare maximum-score value-word
+probability are credited to 2014 sources, not claimed as new numerical results.
+
+Reproduce the extension with `bash research/check.sh`; see
+`research/README.md` for scope, exact source provenance, and remaining questions.
+
 ### 🤖 The AI panel
 
 Hit **RUN AI** and the AI plays the board in front of you. The rows
@@ -294,8 +323,8 @@ sit on, which leaves the tile 2^k exactly k−1 cells. So each of the
 sixteen owns a spawned 4, and **score ≤ 3,932,164 − 64 = 3,932,100** on
 any 16-cell board. The same argument gives Φ_c − 4c on c cells, and
 exhaustive enumeration (`node test/solve.js 2x2|2x3|2x4|3x3`) shows it
-is attained on every board up to nine cells — always on the full chain,
-always with exactly one 4 per tile. The shipped 4×4 line, generated
+is attained on the enumerated boards — on the full chain or its final-2 variant,
+with exactly one spawned 4 per larger tile and per final 4 when present. The shipped 4×4 line, generated
 under a strict last-resort-4 discipline, lands at **1,735 four-spawns**:
 **129,333 moves** and **3,925,224 points**, pinned by the identities
 moves = 131,068 − n₄ and score = 3,932,164 − 4·n₄ and verified by full
@@ -311,9 +340,8 @@ board: **spawn 4s for the fewest moves (65,533, scoring 3,670,024),
 spawn 2s for the most points (3,925,224, in 129,333 moves).** One
 dial, both extremes, and perfect play takes each of them to its bound.
 
-**Longest game.** The same ledger answers a question nobody seems to
-have asked in print: a game's length is mass/2 − (spawned 4s) − 2, the
-full chain is the unique maximum-mass position, and it costs at least
+**Longest game.** The same ledger recovers the 2014 length bound: a game's length is mass/2 − (spawned 4s) − 2, the
+full chain is the unique maximum-mass tile multiset, and it costs at least
 one spawned 4 per tile — so **no 2048 game lasts more than
 2^(c+1) − 4 − c moves, 131,052 on 4×4**, and the longest games *are*
 the maximum-score games up to their last spawn (a final 2 instead of
@@ -394,7 +422,8 @@ symmetry, only the open layers in memory): 2048 in exactly 519 moves —
 the same number as on 4×4, since the formula only sees the tile — max
 score 36,828, longest game 2,034, the chain in 1,021 moves with ten 4s,
 and all 11,136 chain-producing moves of the predicted form. Its honest
-game needs every layer and did not fit in 13 GB.
+game was not solved: the current backward implementation retains all layers
+and exceeded 13 GB; that is not a lower bound on the memory a different solver needs.
 `node test/solve.js 2x2x2` solves Das and Paul's three-dimensional
 2048 on the 2×2×2 cube (six directions, 48 symmetries) in fourteen
 seconds: every bound above is attained there too — 512 in exactly 133
