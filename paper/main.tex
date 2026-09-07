@@ -76,6 +76,11 @@ along the snake, its length fixed in advance by a mass ledger---and what
 is proved about its output: $32{,}781$ moves to $131072$ and $65{,}533$ to
 the full chain, both optimal, and $129{,}333$ moves for $3{,}925{,}224$
 points, $6{,}876$ short of the ceiling, which we conjecture is attainable.
+The lines are published as plain-text witnesses (every slide, every
+spawned tile) with a 160-line verifier that depends on nothing but the
+rules; in particular, whether the standard game can reach $131072$ at all,
+a question called open in 2017 and settled since only by an argument we
+could not verify, now has a certificate.
 Under honest 90/10 spawns the undo button must be pressed about $1.94$
 million times to play the $32{,}781$-move line, a number we compute
 exactly. We also strongly solve the boards up to nine cells and benchmark
@@ -116,11 +121,13 @@ for a ceiling of $3{,}932{,}156$ and claimed geometry prevents paying it.
 That claim was half right: geometry does prevent it, but the right ceiling
 is $3{,}932{,}100$, and we prove it. Even the largest tile has a history:
 the tile-count argument that caps it at $131072$ is old, but whether the
-spatial rules let a game actually reach it was still being called open
-in 2017 \cite{leesmiller2017c}; Das and Paul \cite{daspaul2018} proved it
-can for general boards, and the line shipped with this paper is an
-explicit, machine-checked certificate for the standard game, of the
-minimum possible length. The third and fourth questions we have not seen
+spatial rules let a game actually reach it was doubted in 2014
+\cite{rodgers2014} and still called open in 2017 \cite{leesmiller2017c};
+Das and Paul \cite{daspaul2018} state it for boards of any shape, by an
+argument with a gap we discuss in Section~\ref{sec:recent}. The line
+shipped with this paper is an explicit certificate for the standard game,
+of the minimum possible length, published as a text file that a short
+independent program checks (Section~\ref{sec:certificate}). The third and fourth questions we have not seen
 asked in print; their answers fall out of the same accounting.
 
 \paragraph{Contributions.}
@@ -204,15 +211,18 @@ $3\times3$, reproduces their position count exactly
 
 \paragraph{Higher dimensions.} Das and Paul \cite{daspaul2018} analysed
 2048 on $n_1\times n_2$ boards and on $d$-dimensional boxes
-$n_1\times\dots\times n_d$: they showed that the largest tile $2^{c+1}$,
-$c$ the number of cells, can be reached on every such board, and gave
-strategies for the tile-placing adversary and, under conditions, for the
-player. Our arguments use nothing of a board beyond its cell count and
-the fact that a slide acts line by line, so Theorems~\ref{thm:moves},
-\ref{thm:score} and~\ref{thm:longest} and
-Proposition~\ref{prop:lastmove} hold verbatim in every dimension, and
-Section~\ref{sec:recent} solves their $2\times2\times2$ cube exactly:
-every bound is attained there too.
+$n_1\times\dots\times n_d$: their Theorem~1 states that the largest tile
+$2^{c+1}$, $c$ the number of cells, can be reached on every such board,
+and they give strategies for the tile-placing adversary and, under
+conditions, for the player. Rodgers and Levine \cite{rodgers2014} had
+called $131072$ the maximum attainable tile ``in theory'' while doubting
+the video evidence for it, and Kohler, Migler and Khosmood
+\cite{kohler2019} repeat the $2^{n^2+1}$ figure. Our arguments use
+nothing of a board beyond its cell count and the fact that a slide acts
+line by line, so Theorems~\ref{thm:moves}, \ref{thm:score}
+and~\ref{thm:longest} and Proposition~\ref{prop:lastmove} hold verbatim
+in every dimension, and Section~\ref{sec:recent} solves Das and Paul's
+$2\times2\times2$ cube exactly: every bound is attained there too.
 
 \paragraph{Recent preprints.} Saligram, Bhathal and Manihani
 \cite{saligram2025} compare four deep reinforcement learning agents
@@ -242,10 +252,11 @@ change-making number. The longest game (Theorem~\ref{thm:longest}), the
 forced ending of every full-chain game (Proposition~\ref{prop:lastmove}),
 the eight-spirals statement (Theorem~\ref{thm:eight}), the exact undo
 expectations (Proposition~\ref{prop:undo}) and the exact small-board
-values of Table~\ref{tab:exact} are, as far as we can tell, new; Das and
-Paul's reachability of the top tile is sharpened to the exact fewest
-moves and joined by score and length ceilings that hold in any
-dimension, all attained on the first three-dimensional board solved; the
+values of Table~\ref{tab:exact} are, as far as we can tell, new; the reachability of the top tile, claimed in general by Das and Paul,
+gets an independently checkable certificate on $4\times4$ together with
+the exact fewest moves, and is joined by score and length ceilings that
+hold in any dimension, all attained on the first three-dimensional board
+solved; the
 maximum-score figures $3{,}932{,}164$ and $3{,}932{,}156$ that circulate
 are shown to be unattainable; and the $3\times3$ count of Yamashita et
 al.\ is independently reproduced. The snake strategy in one corner is
@@ -564,7 +575,7 @@ must be $c$, which forces a 4-leaf, and the tight moment fills the board.
 \end{proof}
 
 That $131072$ is the largest tile of $4\times4$ 2048 is folklore, and
-Das and Paul \cite{daspaul2018} proved the bound and its attainability
+Das and Paul \cite{daspaul2018} state the bound, and claim attainability,
 for boards of any shape and dimension; this is a two-line proof of the
 bound that says a little more: the $131072$ is never built from 2s alone,
 and there is a moment when it owns the whole board.
@@ -946,6 +957,42 @@ checks the primed board and the last moves. The optimality claims are the
 theorems cited.
 \end{proof}
 
+\subsection{The certificate, in a form anyone can check}\label{sec:certificate}
+
+Proposition~\ref{prop:cert} is only as good as the replay, so the lines
+are also published in a form that owes nothing to this repository's code:
+three text files in \texttt{witness/} list the two starting tiles and
+then one line per move---the direction slid and the row, column and value
+of the tile that appeared---and \texttt{verify/verify2048.py}, 160 lines
+of Python with no dependencies, replays them under the rules of the
+original game. The verifier implements the slide twice, once cell by cell
+as in Cirulli's \texttt{game\_manager.js} and once line by line, and stops
+at the first move where the two disagree, where a slide changes nothing,
+where a new tile is not a 2 or a 4, or where it lands on an occupied cell.
+On the three witnesses it reports, in under two seconds:
+\begin{center}\footnotesize
+\begin{tabular}{@{}lrrrrl@{}}
+\toprule
+witness & steps verified & score & 2s & 4s & final position \\
+\midrule
+\texttt{131072.txt} & 32{,}781 & 1{,}966{,}092 & 8 & 32{,}775 & $131072$ in the corner, 13 junk tiles \\
+\texttt{full-chain.txt} & 65{,}533 & 3{,}670{,}024 & 0 & 65{,}535 & the full chain, dead \\
+\texttt{max-score.txt} & 129{,}333 & 3{,}925{,}224 & 127{,}600 & 1{,}735 & the full chain, dead \\
+\bottomrule
+\end{tabular}
+\end{center}
+The counts of spawned 2s and 4s include the two starting tiles, and each
+report ends with ``Illegal moves: 0, Illegal spawns: 0, Certificate:
+VALID''. A second, deliberately different check
+(\texttt{test/replay\_engine.js}) feeds the same text files to the
+original game engine---Cirulli's \texttt{game\_manager.js},
+\texttt{grid.js} and \texttt{tile.js}, unmodified, with the random tile
+replaced by the prescribed one---and confirms the same counts. Any
+implementation of the rules will do the same job in a few dozen lines;
+the format is documented in the files themselves. We are not aware of an
+earlier explicit, independently checkable certificate that the standard
+$4\times4$ game reaches $131072$, let alone one of the minimum length.
+
 \subsection{Playing it}
 
 The application plays a line move by move. With planned spawns each move
@@ -1178,7 +1225,7 @@ question, standard $4\times4$ game & status \\
 optimal move in every position; optimal expected score & open; $4\times3$ solved \cite{kaneko2026}; boards up to nine cells and the cube solved here (Table~\ref{tab:honest}) \\
 a strategy reaching 2048 with high probability & yes, probability $\ge0.99969$ \cite{slizkov2023} \\
 a tile reachable with certainty & 256 \cite{slizkov2023}; the optimal probability of each larger tile is open \\
-largest tile & $131072$: bound folklore and \cite{daspaul2018}, Corollary~\ref{cor:toptile}; reachable, \cite{daspaul2018} and the certificate of Theorem~\ref{thm:lines}(a) \\
+largest tile & $131072$: bound folklore and \cite{daspaul2018}, Corollary~\ref{cor:toptile}; reachable: the certificate of Section~\ref{sec:certificate} (claimed for all boards by \cite{daspaul2018}) \\
 fewest moves to 2048 & 519, exact: \cite{leesmiller2017} and Theorem~\ref{thm:moves} \\
 fewest moves to 131072 & $32{,}781$, exact: Theorem~\ref{thm:moves} and the shipped line; every such win passes the primed board (Lemma~\ref{lem:primed}) \\
 maximum score & between $3{,}925{,}224$ and $3{,}932{,}100$ (Theorems~\ref{thm:score}, \ref{thm:lines}); conjectured $3{,}932{,}100$ \\
@@ -1191,6 +1238,31 @@ number of reachable positions & open; more than $1.3\cdot10^{12}$ \cite{leesmill
 \caption{What is known about the standard game, September 2026.}
 \label{tab:status}
 \end{table}
+
+\paragraph{Reaching the largest tile.} The upper bound $2^{c+1}$ is
+elementary (Corollary~\ref{cor:toptile}); the question has always been
+attainability under the actual slide rules. Rodgers and Levine
+\cite{rodgers2014} called $131072$ attainable ``in theory'' and the video
+evidence for it suspect; Lees-Miller \cite{leesmiller2017c} obtained it
+from tile counting alone and left the geometric question open. Das and
+Paul \cite{daspaul2018} state attainability for every $n_1\times n_2$
+board as their Theorem~1. Their argument prescribes the spawns and
+proceeds by induction on the board, performing the construction for an
+$n_1\times n_2$ board inside an $(n_1+1)\times n_2$ board and then using
+the extra cells; but a slide moves every line of the board, so a
+sub-board is not isolated from the rest, and the step needs an invariant
+that keeps the extra cells out of the way, which the paper does not
+state. We were unable to complete the argument from what is written, and
+we do not claim the general statement here. What is established: on every
+board up to nine cells, the cube included, by exhaustive enumeration
+(Table~\ref{tab:exact}); on $4\times3$ by Kaneko and Yamashita's
+enumeration, which reaches $8192=2^{13}$; and on $4\times4$ by the
+certificate of Section~\ref{sec:certificate}, which also has the
+minimum possible length. A uniform construction with a proven invariant
+for all rectangles is open, and it is not the naive one: a snake counter
+that spawns at the far end of the frontier row and slides toward its head
+fails at the first turn of every board we tried, and our $4\times4$ line
+was found by search, not by a rule.
 
 \paragraph{Predictions for $4\times3$.} Kaneko and Yamashita's pass
 carries, per position, what the optimal policy needs. Adding a two-byte
@@ -1231,10 +1303,12 @@ equivalently a $131{,}052$-move game.
 \item The maximum score and longest game of $4\times3$ (predicted
 $180{,}180$ and $8{,}176$) and $2\times5$ (predicted $36{,}828$ and
 $2{,}034$), within reach of layered enumeration.
-\item Whether Theorems~\ref{thm:score} and~\ref{thm:longest} are tight on
-\emph{every} board and in every dimension, and whether a uniform
-construction exists; the $2\times2\times3$ box (twelve cells) is the
-next three-dimensional case, at the scale of $4\times3$.
+\item A proof that $2^{c+1}$ is reachable on every rectangular board,
+i.e.\ a uniform strategy with a proven invariant (Das and Paul's
+Theorem~1); and then whether Theorems~\ref{thm:moves}, \ref{thm:score}
+and~\ref{thm:longest} are tight on \emph{every} board and in every
+dimension. The $2\times2\times3$ box (twelve cells) is the next
+three-dimensional case, at the scale of $4\times3$.
 \item Which arrangements of the full chain are reachable on $4\times4$?
 At least the eight spirals are; every reachable one has its 4 on the
 boundary beside the 8 (Proposition~\ref{prop:lastmove}). Can the
@@ -1257,7 +1331,11 @@ Table~\ref{tab:honest} ($3\times3$ takes about five minutes;
 \texttt{2x2x2} fourteen seconds);
 \texttt{PERFECT=1 node test/run.js} replays each shipped line through the
 game engine and asserts the exact counts (\texttt{GOAL=spiral|score},
-\texttt{ORIENT=col}); \texttt{node test/paper\_facts.js} checks
+\texttt{ORIENT=col}); \texttt{python3 verify/verify2048.py witness/131072.txt} checks a
+witness independently of everything else in the repository, and
+\texttt{node test/replay\_engine.js witness/131072.txt} replays it
+through the original engine (\texttt{node test/gen\_witness.js}
+regenerates the witnesses from the shipped data); \texttt{node test/paper\_facts.js} checks
 Lemma~\ref{lem:primed}, Proposition~\ref{prop:lastmove} and
 Theorem~\ref{thm:eight} against the shipped lines and, exhaustively, the
 tiny boards; \texttt{node test/gen\_perfect.js} regenerates a line from

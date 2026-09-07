@@ -330,6 +330,36 @@ The 3×3 count of 48,713,519 positions (up to symmetry) matches the one
 Yamashita, Kaneko and Nakayashiki published when they strongly solved
 that board; Kaneko and Yamashita's 4×3 (1.15 trillion positions) is
 out of this machine's reach.
+**Check it yourself, without this code.** The three lines are also
+published as plain text in `witness/` — the two starting tiles, then
+one line per move: the direction slid and the row, column and value of
+the tile that appeared — and `verify/verify2048.py` (160 lines of
+Python, no dependencies, the slide rule implemented twice and compared
+at every move) replays them under the rules of the original game:
+
+```
+python3 verify/verify2048.py witness/131072.txt     # 32,781 moves -> 131072
+python3 verify/verify2048.py witness/full-chain.txt # 65,533 moves -> 131072 ... 4, dead
+python3 verify/verify2048.py witness/max-score.txt  # 129,333 moves -> score 3,925,224
+```
+
+It stops at the first slide that changes nothing, the first tile that
+is not a 2 or a 4, or the first tile that lands on an occupied cell; it
+reaches the end on all three, in about a second, and prints
+`Illegal moves: 0`, `Illegal spawns: 0`, `Certificate: VALID`. A second,
+deliberately different check, `node test/replay_engine.js
+witness/131072.txt`, feeds the same file to the *original* game engine
+(Cirulli's `game_manager.js`, `grid.js`, `tile.js`, unmodified, with the
+random tile replaced by the prescribed one) and reports the same
+counts; it never loads the AI. That settles a question
+that was doubted in 2014 and called open in 2017 — whether a legal 4×4
+game can reach 131072 at all — with a certificate rather than an
+argument (Das and Paul's 2018 induction claims it for every board, but
+embeds a small board in a larger one as if slides did not move whole
+lines; a uniform construction with a proven invariant is open).
+`node test/gen_witness.js` regenerates the witnesses from the shipped
+data.
+
 `node test/solve.js 2x2x2` solves Das and Paul's three-dimensional
 2048 on the 2×2×2 cube (six directions, 48 symmetries) in fourteen
 seconds: every bound above is attained there too — 512 in exactly 133
