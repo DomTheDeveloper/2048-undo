@@ -30,6 +30,13 @@ jobs:
             | sh -s -- -y --default-toolchain none
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
 
+      - name: Fetch Mathlib and cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          lake update
+          lake exe cache get
+
       - name: Generate certificate chunks
         run: python3 lean/gen_witness.py
 
