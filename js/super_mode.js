@@ -13,7 +13,7 @@
 
   var Super = window.Super2048;
   var BASE_MPS = 8; // moves per second at 1x
-  var BUILD = "4";  // bump with index.html's ?v= so browsers refetch the scripts
+  var BUILD = "5";  // bump with index.html's ?v= so browsers refetch the scripts
 
   var TILES = ["evil", "regular", "perfect"];
   var UNDOS = ["disabled", "regular", "perfect"];
@@ -619,10 +619,6 @@
   function tilesWords() {
     return controller.tiles === "evil" ? "Evil tiles" : "regular tiles";
   }
-  function undoWords() {
-    if (controller.tiles === "evil" || controller.undo === "disabled") return "no undo";
-    return "undo only to escape game over";
-  }
 
   // The HUD: three counters, nothing that changes width.
   function updateHud() {
@@ -728,46 +724,25 @@
                                : controller.headless.stats;
     var el = $(".super-win");
     var score = controller.driver ? gm().score : st.score;
+    // One short line under the number; the counters below carry the rest.
     if (honestPlay()) {
       var mt = st.maxTile || Super.maxTile(controller.driver
         ? controller.driver.readBoard() : controller.headless.board);
       $(".super-win h2").textContent = fmtInt(mt);
-      var why = controller.endReason === "won"
-        ? "131072 by honest play. Unbelievable."
-        : controller.endReason === "out of luck"
-        ? "Out of luck: " + STALL_DEATHS + " deaths in a row without a new best score."
-        : "Game over — no moves left.";
-      $(".super-win-sub").innerHTML = why + "<br>" + algoWho() + " — " +
-        tilesWords() + ", " + undoWords() + " — score " + fmtInt(score) +
-        (st.deaths ? ", " + fmtInt(st.deaths) + " deaths escaped" : "") + ".";
+      var why = controller.endReason === "won" ? "131072"
+              : controller.endReason === "out of luck" ? "Out of luck"
+              : "Game over";
+      $(".super-win-sub").textContent = why + " · " + algoWho() + " · " +
+        tilesWords() + " · " + fmtInt(score) + " points";
+    } else if (controller.goal === "score") {
+      $(".super-win h2").textContent = fmtInt(score);
+      $(".super-win-sub").textContent = "The full chain. The board is dead.";
+    } else if (controller.goal === "spiral") {
+      $(".super-win h2").textContent = "131072";
+      $(".super-win-sub").textContent = "Every power of two on the board at once.";
     } else {
-      var exact = onBook() ? "exactly " + lineMoves() + " moves"
-                           : fmtInt(st.moves) + " moves";
-      var how = controller.tiles === "perfect"
-        ? (controller.speed === "headless" ? "computed as pure data: "
-                                            : "played from the book: ") +
-          exact + ", zero undos"
-        : "honest spawns, every unlucky one undone: " + exact + ", " +
-          fmtInt(st.undos) + " undos";
-      if (controller.tiles !== "perfect" && controller.speed === "headless") {
-        how += ", all as pure matrix data";
-      }
-      if (controller.goal === "score") {
-        $(".super-win h2").textContent = fmtInt(score);
-        $(".super-win-sub").innerHTML =
-          "Maximum-score run complete — 131072 plus the full descending " +
-          "chain; " + how + ".<br>The board is dead. Gloriously.";
-      } else if (controller.goal === "spiral") {
-        $(".super-win h2").textContent = "131072";
-        $(".super-win-sub").innerHTML =
-          "THE FULL SPIRAL — every power of two from 131072 down to 4, " +
-          "one per cell; " + how + ".<br>The board is dead. Perfectly.";
-      } else {
-        $(".super-win h2").textContent = "131072";
-        $(".super-win-sub").innerHTML =
-          "Perfect spiral complete, capped off by a spawned&nbsp;4 — " + how +
-          ".<br>The highest tile 2048 allows.";
-      }
+      $(".super-win h2").textContent = "131072";
+      $(".super-win-sub").textContent = "The highest tile in 2048.";
     }
     $(".super-win-moves").textContent = fmtInt(st.moves);
     $(".super-win-undos").textContent = fmtInt(st.undos);
