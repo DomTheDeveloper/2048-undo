@@ -1,0 +1,105 @@
+name: Integrate and publish audited state-space research
+on:
+  push:
+    branches: ['claude/super-mode-speed-corners-doxfcj']
+    paths: ['.github/workflows/state-space-publication.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: state-space-publication-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/claude/super-mode-speed-corners-doxfcj'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Execute a fresh complete research audit
+        run: bash research/state-space/run.sh --large --output-dir "$RUNNER_TEMP/state-space-publication"
+      - name: Apply reviewed source changes without overwriting concurrent edits
+        run: python3 research/state-space/integrate_paper.py
+      - name: Replay the existing witnesses independently
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p publication
+          for witness in 131072 131072-two-twos; do
+            python3 verify/verify2048.py "witness/$witness.txt" | tee "publication/$witness-python.log"
+            node test/replay_engine.js "witness/$witness.txt" | tee "publication/$witness-engine.log"
+          done
+      - name: Install the manuscript build tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends latexmk texlive-latex-extra texlive-pictures texlive-fonts-recommended poppler-utils
+      - name: Build and validate the complete revised paper
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd paper
+          latexmk -pdf -interaction=nonstopmode -halt-on-error -file-line-error main.tex | tee ../publication/paper-build.log
+          if grep -E 'undefined references|Citation .* undefined|Reference .* undefined|Overfull \\hbox' main.log; then
+            echo 'Unresolved references or overflowing text in the rebuilt paper.' >&2
+            exit 1
+          fi
+          pdfinfo main.pdf | tee ../publication/paper-pdfinfo.txt
+          pdftotext main.pdf ../publication/paper-text.txt
+          grep -q 'Structural reachability' ../publication/paper-text.txt
+          grep -q '22,851,583' ../publication/paper-text.txt
+          grep -q '32,782' ../publication/paper-text.txt
+      - name: Retain the audited numerical outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, shutil
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP']) / 'state-space-publication'
+          report = json.loads((root / 'manifest.json').read_text())
+          if report['status'] != 'passed' or len(report['completed_cases']) != 7:
+              raise SystemExit('Publication requires seven newly completed cases.')
+          target = Path('research/state-space/results')
+          target.mkdir(parents=True, exist_ok=True)
+          for item in (root / 'results').iterdir():
+              if item.suffix in ('.json', '.csv'):
+                  shutil.copy2(item, target / item.name)
+          for name in ('manifest.json', 'bounds.json'):
+              shutil.copy2(root / name, target / name)
+          (target / 'PROVENANCE.md').write_text(
+              '# Completed repository audit\n\n'
+              f"Source commit: `{os.environ['GITHUB_SHA']}`.\n\n"
+              f"GitHub Actions run: `{os.environ['GITHUB_RUN_ID']}`.\n\n"
+              'The manifest records seven cases actually regenerated from this commit, '
+              'the source SHA-256 values, exit codes, software versions, and output hashes. '
+              'Only JSON/CSV reports are checked in; the complete state dumps and build logs '
+              'are retained in the corresponding Actions artifact. Hashes record byte '
+              'identity; the independent raw-state and closure checks establish the '
+              'small-board verification claims. The new proofs are not Lean-compiled.\n')
+          PY
+      - name: Commit the corrected manuscript, PDF, and completed audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --exit-code -- js lean lean-kernel witness
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add README.md paper/main.tex paper/main.pdf research/state-space/results/
+          git rm .github/workflows/state-space-publication.yml
+          git diff --cached --check
+          git commit -m 'Integrate the audited state-space proofs, repair score equality, and publish the rebuilt paper'
+          git push origin HEAD:claude/super-mode-speed-corners-doxfcj
+          git rev-parse HEAD > publication/publication-commit.txt
+          cp paper/main.pdf publication/Perfect-2048-state-space.pdf
+          cp paper/main.tex paper/state-space.tex paper/refs.bib publication/
+          cp research/state-space/results/manifest.json publication/research-manifest.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: state-space-publication-${{ github.run_id }}
+          path: |
+            publication/
+            paper/main.log
+            ${{ runner.temp }}/state-space-publication/
+          if-no-files-found: error
+          retention-days: 30
