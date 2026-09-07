@@ -94,8 +94,8 @@ theorem merge_heavy (xs : List Nat) (k : Nat) :
       by_cases h : a = b
       · subst b
         have ih := merge_heavy rest k
-        simp only [merge, if_pos rfl, heavyList, heavyTile_double]
-        omega
+        have hh := Nat.add_le_add_left ih (heavyTile k a + heavyTile k a)
+        simpa [merge, heavyList, heavyTile_double, Nat.add_assoc] using hh
       · have ih := merge_heavy (b :: rest) k
         have ha := heavyTile_mono_double k a
         simp only [merge, if_neg h, heavyList] at *
@@ -160,7 +160,7 @@ theorem toList_heavy (r : Row) (k : Nat) : heavyList k r.toList = r.heavy k := b
 theorem left_length (r : Row) : (merge (compact r.toList)).length ≤ 4 := by
   have hm := merge_length (compact r.toList)
   have hc := compact_length r.toList
-  simp only [toList, List.length_cons, List.length_nil] at hc
+  have ht : r.toList.length = 4 := rfl
   omega
 
 theorem ofList_heavy (xs : List Nat) (k : Nat) : (ofList xs).heavy k ≤ heavyList k xs := by
