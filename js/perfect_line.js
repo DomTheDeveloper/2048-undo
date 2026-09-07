@@ -11,7 +11,7 @@
 //   full — to the COMPLETE spiral, 131072 down to 4 filling the
 //          board: (262140-8)/4 = 65,533 moves, score 3,670,024.
 //   score — the same spiral fed with 2s (two forced 4-spawns at
-//          the death squeeze): 131,066 moves, score 3,932,156 —
+//          the death squeeze); the proved ceiling is 3,932,100 —
 //          the maximum 2048 allows.
 (function (root) {
   var api = {

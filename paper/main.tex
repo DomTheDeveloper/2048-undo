@@ -1,0 +1,612 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1.05in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage[hidelinks]{hyperref}
+\usepackage{url}
+\usepackage{enumitem}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{conjecture}[theorem]{Conjecture}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+
+\newcommand{\Phichain}{\Phi}
+\newcommand{\nfour}{n_4}
+\newcommand{\ntwo}{n_2}
+\newcommand{\mass}{\mathrm{mass}}
+\newcommand{\Str}{\mathrm{S}}
+
+\title{Perfect 2048:\\ the fewest moves, the highest score,\\ and what the undo button buys}
+\author{Dom the Developer\\ \small \url{https://github.com/DomTheDeveloper/2048-undo}}
+\date{Draft, September 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We study 2048 under \emph{possible play}: the spawn sequence is treated as
+part of the plan, which is exactly what a player with a re-randomising undo
+button can realise, and exactly what ``possible with positive probability''
+means for the ordinary game. Three results. (1)~On any board, the tile
+$2^n$ cannot appear before move $(2^n-8)/4+(n-2)$; the bound is attained,
+giving $519$ for the 2048 tile (recovering Lees-Miller's Markov-chain
+figure) and $32{,}781$ for the largest tile $131072$ on the $4\times4$
+board, and $65{,}533$ moves for the complete descending chain
+$131072,65536,\dots,4$. (2)~On any board with $c$ cells the score is at
+most $\Phi_c-4c$ where $\Phi_c=\sum_{k=2}^{c+1}(k-1)2^k$: reaching the
+top position needs at least one spawned~4 for every one of its $c$ tiles,
+and each spawned~4 forfeits exactly four points. The proof is a
+register-allocation (pebbling) argument. For $4\times4$ this is
+$3{,}932{,}100$. Exhaustive enumeration shows the bound is tight on every
+board with at most nine cells---$2\times2$, $2\times3$, $2\times4$,
+$3\times3$---and reproduces, to the digit, the $48{,}713{,}519$ positions of
+$3\times3$ reported by Yamashita, Kaneko and Nakayashiki. For $4\times4$ we
+give an explicit line scoring $3{,}925{,}224$ in $129{,}333$ moves; whether
+the remaining $6{,}876$ points can be collected is open, and we conjecture
+they can. (3)~The perfect lines are shipped as data and replayed in a
+browser; with honest 90/10 spawns the undo button must be pressed about
+$1.94$ million times to play the $32{,}781$-move line, a number we compute
+exactly. We also strongly solve the boards up to nine cells (optimal
+expected score, tile probabilities) and benchmark an expectimax player
+against the classical heuristics on the full board.
+\end{abstract}
+
+\section{Introduction}
+
+2048 \cite{cirulli2014} is played on a $4\times4$ board. A move slides all
+tiles in one of four directions; equal tiles that collide merge into their
+sum, each tile merging at most once per move; then one new tile appears in
+a uniformly random empty cell, a 2 with probability $0.9$ and a 4 with
+probability $0.1$. The score is the sum of all merged values. The game
+ends when no move changes the board.
+
+Alok Menghrajani's fork \cite{menghrajani2014} adds an undo button that
+re-randomises the spawn on replay. That small change turns the game into a
+different object: a player who is willing to press undo often enough can
+realise \emph{any} spawn sequence, and so can play any game that is possible
+in principle. This paper is about those games. Three questions organise it:
+\begin{enumerate}[nosep]
+\item What is the fewest moves in which the largest tile can be built?
+\item What is the highest score any game can reach?
+\item What does the undo button cost, in presses, to play such a game?
+\end{enumerate}
+
+The first two questions have folklore answers. For the move count, the
+observation that every move adds a spawned 2 or 4 to the board gives a
+lower bound immediately; the cascade that finishes the tile adds a few more
+moves, and it was not obvious that the sum is exact. For the score, several
+numbers circulate: $3{,}932{,}164$ (pure mass accounting), $3{,}932{,}156$
+(two ``structurally forced'' 4-spawns), and $3{,}932{,}100$ (one forced
+4-spawn per tile of the final position). Our own earlier README argued
+for a ceiling of $3{,}932{,}156$ and claimed geometry prevents paying it.
+That claim was half right: geometry does prevent it, but the right ceiling
+is $3{,}932{,}100$, and we prove it.
+
+\paragraph{Contributions.}
+\begin{itemize}[nosep]
+\item Theorem~\ref{thm:moves}: a complete proof that $2^n$ needs at least
+$(2^n-8)/4+(n-2)$ moves on any board, with equality for $n=11$ (519) and
+$n=17$ ($32{,}781$) on $4\times4$, and for every tile on every board of at
+most nine cells.
+\item Theorem~\ref{thm:score}: on any $c$-cell board, score $\le\Phi_c-4c$.
+The argument identifies a merge tree's cell requirement with its Strahler
+number (the Ershov register count) and shows that the $c$ final tiles must
+pay their tight moments in a forced order.
+\item Exact values (Section~\ref{sec:exact}): the bound is attained on
+$2\times2$, $2\times3$, $2\times4$ and $3\times3$; the enumerator agrees
+with the published $3\times3$ state count.
+\item Section~\ref{sec:fourbyfour}: for $4\times4$, an explicit
+$129{,}333$-move line scoring $3{,}925{,}224$ with $1{,}735$ spawned 4s,
+where the theorem allows $16$; we locate where the construction spends its
+4s and conjecture the ceiling is attainable.
+\item Section~\ref{sec:undo}: the exact expected number of undo presses
+for each shipped line under honest odds, and the opening problem.
+\item Section~\ref{sec:honest}: a strong solution of the small boards
+(expected score, tile probabilities) and an expectimax player for the
+full board measured against the classical heuristics and an adversarial
+tile generator.
+\end{itemize}
+
+\section{Related work}
+
+\paragraph{Complexity and combinatorics.} Langerman and Uno
+\cite{langerman2016} showed that deciding whether a given position can be
+played to a given tile is NP-hard on $m\times n$ boards for Threes, 1024
+and 2048; Abdelkader, Acharya and Dasler \cite{abdelkader2016} showed the
+variant without new tiles is still hard; Mehta \cite{mehta2014} gave a
+PSPACE-completeness result for a related decision problem. Eppstein
+\cite{eppstein2018} analysed the maximum score in a relaxed model of
+2048-like games in which any set of cells whose values sum to a tile value
+may be merged in one step, proving a min--max theorem that equates the
+maximum score with the smallest value for which greedy change-making needs
+a given number of coins; the binary-counter strategy every strong 2048
+player follows is, in that light, greedy change-making in base~2. The
+relaxed model has only the small spawn value. The real game's 4-spawns are
+precisely the resource that buys an extra cell, and Theorem~\ref{thm:score}
+prices that resource: four points each, and exactly $c$ of them on the way
+to the top position.
+
+\paragraph{Learning agents.} Szubert and Ja\'skowski \cite{szubert2014}
+introduced temporal-difference learning of $n$-tuple networks for 2048; Wu
+et al.\ \cite{wu2014} added multi-stage learning; Ja\'skowski
+\cite{jaskowski2018} reached the strongest reported agents; Matsuzaki and
+co-authors studied the systematic selection of $n$-tuples and
+neural-network players \cite{oka2016,matsuzaki2016,matsuzaki2017,matsuzaki2019};
+Guei, Wei and Wu \cite{guei2020,guei2021} used 2048-like games for
+teaching reinforcement learning and proposed optimistic TD learning.
+Slizkov \cite{slizkov2023} proved rigorous bounds on honest play: a
+strategy reaching 2048 with probability at least $0.99969$, and 256 with
+certainty.
+
+\paragraph{Exact solving.} Lees-Miller \cite{leesmiller2017,leesmiller2017b,leesmiller2018}
+analysed the game with Markov chains and Markov decision processes,
+computed the minimum of 519 moves to the 2048 tile, and enumerated the
+$2\times2$ and $3\times3$ games. Yamashita, Kaneko and Nakayashiki
+\cite{yamashita2022} strongly solved $3\times3$ ($48{,}713{,}519$ positions)
+and Kaneko and Yamashita \cite{kaneko2026} strongly solved $4\times3$
+($1{,}152{,}817{,}492{,}752$ positions, $739{,}648{,}886{,}170$ afterstates,
+optimal expected score about $50{,}724.26$ from a two-2s start), the key
+technique being to partition the state space by the sum of tile values
+(the ``age'' of a state). Our enumerator uses the same grading and, on
+$3\times3$, reproduces their position count exactly
+(Section~\ref{sec:exact}).
+
+\section{Preliminaries}
+
+A board is a finite set of $c$ cells with a slide structure (rows and
+columns in the rectangular case; the arguments below use only the cell
+count). Tiles carry values $2^k$, $k\ge1$; we call $k$ the \emph{rank}. A
+\emph{play} is a sequence of moves, each consisting of a slide (which
+performs its merges) followed by a \emph{spawn} of a 2 or a 4 into an empty
+cell. The game starts with two spawns. Let $\ntwo$ and $\nfour$ be the
+numbers of spawned 2s and 4s so far, counting the two starting tiles.
+
+\begin{definition}[possible play]
+In \emph{possible play} the spawn values and cells are chosen by the
+player. Every finite spawn sequence has positive probability in the honest
+game, so a position is reachable in possible play if and only if it is
+reachable with positive probability in the honest game; and a player with
+a re-randomising undo button can realise any possible play.
+\end{definition}
+
+For a position $B$ write $\mass(B)=\sum_{t\in B}2^{k_t}$ and
+\[
+\Phichain(B)=\sum_{t\in B}(k_t-1)\,2^{k_t}.
+\]
+
+\begin{lemma}[mass ledger]\label{lem:mass}
+Slides conserve mass and every spawn adds its value:
+$\mass(B)=2\ntwo+4\nfour$ at all times. After $m$ moves the mass is at
+most $8+4m$, with equality if and only if every spawn so far, the two
+starting tiles included, was a~4.
+\end{lemma}
+
+\begin{lemma}[score identity]\label{lem:score}
+At every moment of every play, $\mathrm{score}=\Phichain(B)-4\nfour$.
+\end{lemma}
+\begin{proof}
+By induction over events. Initially the score is $0$; a starting 2
+contributes $0$ to $\Phichain$, a starting 4 contributes $4$ and raises
+$4\nfour$ by $4$. A merge of two $2^k$ tiles into $2^{k+1}$ scores
+$2^{k+1}$ and changes $\Phichain$ by $k2^{k+1}-2(k-1)2^k=2^{k+1}$. A spawned
+2 changes nothing on either side; a spawned 4 adds $4$ to $\Phichain$ and
+$4$ to $4\nfour$.
+\end{proof}
+
+So every spawned 4 costs exactly four points relative to what the final
+position ``looks like it is worth'', and the maximum score of a game is
+$\max_B\bigl(\Phichain(B)-4\,\nfour^{\min}(B)\bigr)$ over reachable
+positions $B$, where $\nfour^{\min}(B)$ is the fewest spawned 4s on any play
+reaching $B$.
+
+\paragraph{Merge trees.} Every tile on the board is the root of a binary
+\emph{merge tree}: its leaves are spawned tiles (value 2 or 4), each
+internal node is a tile created by merging its two children. A tile of
+rank $k$ has all leaves at depth $k-1$ (2-leaves) or $k-2$ (4-leaves). Two
+facts about the game drive everything below:
+\begin{itemize}[nosep]
+\item \emph{Persistence.} A tile, once spawned or created, stays on the
+board until it merges into its parent. Nothing else removes it.
+\item \emph{One doubling per move.} A tile's value at most doubles in a
+move, because each tile merges at most once per move.
+\end{itemize}
+Call the tiles present on the board that belong to the merge tree of a
+future tile $T$ the \emph{pieces} of $T$. By persistence, from the first
+spawn of a leaf of $T$ until $T$ is created, at least one piece of $T$ is
+on the board; afterwards $T$ itself is.
+
+\section{The fewest moves}
+
+\begin{theorem}\label{thm:moves}
+On any board and for any play, the tile $2^n$ ($n\ge3$) does not exist
+before move
+\[
+M(n)=\frac{2^n-8}{4}+(n-2).
+\]
+Equality is attainable only if the game starts from two 4s and every spawn
+outside the last $n-2$ moves is a~4.
+\end{theorem}
+\begin{proof}
+Let $T$ be the first move after which a tile $2^n$ exists. A tile spawned
+at move $T-j$ has value at most $4=2^2$ then, and by one doubling per move
+its value at move $T$ is at most $2^{2+j}$; for it to be part of the $2^n$
+we need $2+j\ge n$, i.e.\ $j\ge n-2$. Hence the $n-2$ tiles spawned at
+moves $T-(n-3),\dots,T$ are not part of the $2^n$: they are still on the
+board (persistence), as themselves or merged among each other, so the
+position after move $T$ has mass at least $2^n$ plus the sum of those
+$n-2$ spawn values.
+
+Write $z$ for the number of spawned 2s among the $T$ move-spawns and $z'$
+for the number among the last $n-2$ of them, so $z'\le z$. By
+Lemma~\ref{lem:mass} the mass after move $T$ is $M_0+4T-2z$ with
+$M_0\le8$ the starting mass, and the last $n-2$ spawns sum to $4(n-2)-2z'$.
+Therefore
+\[
+M_0+4T-2z\;\ge\;2^n+4(n-2)-2z',
+\qquad\text{so}\qquad
+4T\;\ge\;2^n-8+4(n-2)+2(z-z')+(8-M_0)\;\ge\;2^n-8+4(n-2),
+\]
+which is the claim. Equality forces $M_0=8$ and $z=z'$.
+\end{proof}
+
+Attainability is a construction. For $n=11$, Lees-Miller's Markov chain
+\cite{leesmiller2017} exhibits the $519=510+9$ move win on $4\times4$. For
+$n=17$ we generated, verified and ship a $32{,}781$-move line
+(Section~\ref{sec:lines}); Table~\ref{tab:exact} shows that the bound is
+attained for every tile on every board up to nine cells.
+
+\begin{corollary}\label{cor:chain}
+On $4\times4$ the complete descending chain $131072,65536,\dots,4$ (one
+power of two per cell, a dead position) needs exactly $65{,}533$ moves.
+\end{corollary}
+\begin{proof}
+Its mass is $2^{18}-4=262{,}140$; by Lemma~\ref{lem:mass} at least
+$(262{,}140-8)/4=65{,}533$ moves are needed and every spawn must be a~4.
+The shipped line (Section~\ref{sec:lines}) does it in exactly that many.
+Along it the $131072$ first forms at move $32{,}784$, three later than
+$M(17)$: all-4 feeding needs a few consolidations that a 2-spawn during
+the cascade would avoid, and the ledger absorbs them.
+\end{proof}
+
+\section{The highest score}
+
+\subsection{A merge tree needs its Strahler number of cells}
+
+The \emph{Strahler number} of a binary tree is $\Str(\text{leaf})=1$ and,
+for a node with subtrees $A,B$, $\Str=\max(\Str A,\Str B)$ if they differ
+and $\Str A+1$ if they are equal. It is the number of registers needed to
+evaluate an expression tree without spilling (Ershov \cite{ershov1958},
+Sethi--Ullman \cite{sethi1970}, Flajolet--Raoult--Vuillemin
+\cite{flajolet1979}) and the black pebbling number of the tree
+\cite{paterson1970}. Building a tile is evaluating its merge tree with
+cells as registers, and the persistence of pieces makes the lower bound
+short to prove directly.
+
+\begin{lemma}\label{lem:strahler}
+Let $T$ be a tile of rank $k\ge2$ with merge tree $\mathcal T$. Then
+$\Str(\mathcal T)=k$ if every leaf is a 2, and $\Str(\mathcal T)=k-1$
+if at least one leaf is a 4.
+\end{lemma}
+\begin{proof}
+Induction on $k$. For $k=2$: a spawned 4 is a leaf ($\Str=1$), and
+$2+2$ has $\Str=2$. For $k>2$ the children are trees of rank $k-1$ with
+Strahler numbers in $\{k-2,k-1\}$, equal to $k-1$ exactly when all their
+leaves are 2s. Two all-2 children give $\Str=k$; otherwise the maximum is
+$k-1$ and, if both are $k-2$, $\Str=k-1$ as well.
+\end{proof}
+
+\begin{lemma}[tight moment]\label{lem:tight}
+During the construction of a tile with merge tree $\mathcal T$ there is a
+moment at which at least $\Str(\mathcal T)$ pieces of $\mathcal T$ are on
+the board simultaneously.
+\end{lemma}
+\begin{proof}
+Induction on $\mathcal T$; a leaf is its own piece. Let the root have
+subtrees $A$ and $B$, roots created at times $t_A<t_B$ (if they are
+created in the same move, either order works), merged at time $t^*>t_B$.
+Let $\tau_A,\tau_B$ be tight moments of $A,B$ given by induction, so
+$\tau_A\le t_A$ and $\tau_B\le t_B$. If $\Str A>\Str B$, or $\Str B>\Str A$,
+the larger side's tight moment already shows $\max(\Str A,\Str B)$ pieces.
+Suppose $\Str A=\Str B=s$; we need $s+1$.
+\begin{itemize}[nosep]
+\item If $\tau_B>t_A$: at $\tau_B$ the $s$ pieces of $B$ are on the board
+and so is the finished root of $A$ (created at $t_A<\tau_B<t_B\le t^*$,
+and persistent): $s+1$ pieces.
+\item If $\tau_B\le t_A$ and $\tau_A>t_B$: symmetric, $s$ pieces of $A$
+plus the root of $B$.
+\item If $\tau_B\le t_A$ and $\tau_A\le t_B$: from $\tau_B$ until $t_B$
+at least one piece of $B$ is on the board (persistence), and $\tau_A\le
+t_A<t_B$; if $\tau_A\ge\tau_B$ then at $\tau_A$ there are $s$ pieces of $A$
+and at least one of $B$. If instead $\tau_A<\tau_B\le t_A$, then at
+$\tau_B$ there are $s$ pieces of $B$ and at least one piece of $A$
+(present from $\tau_A$ until $t_A\ge\tau_B$).
+\end{itemize}
+In every case some moment shows $s+1$ pieces of $\mathcal T$.
+\end{proof}
+
+\subsection{The ceiling}
+
+Let $\Phi_c=\sum_{k=2}^{c+1}(k-1)2^k=(c-1)2^{c+2}+4$, the value of
+$\Phichain$ on the \emph{full chain} $2^{c+1},2^c,\dots,2^2$: one distinct
+power of two per cell.
+
+\begin{theorem}\label{thm:score}
+On any board with $c$ cells, every play satisfies
+$\mathrm{score}\le\Phi_c-4c$. Equality requires the final position to be
+the full chain, reached with exactly one spawned 4 in the merge tree of
+each of its $c$ tiles.
+\end{theorem}
+\begin{proof}
+Fix a play and its final position with tiles $T_1,\dots,T_m$, $m\le c$, of
+ranks $k_1,\dots,k_m$. Every spawned tile of the whole play is a leaf of
+exactly one $T_i$, so $\nfour=\sum_i h_i'$ where $h_i'$ counts the 4-leaves
+of $T_i$; put $h_i=\min(h_i',1)$. By Lemma~\ref{lem:strahler} the Strahler
+number of $T_i$'s tree is $S_i=k_i-h_i$ (a tile of rank~1 is a spawned 2,
+$S_i=1$).
+
+Let $\tau_i$ be a tight moment of $T_i$ (Lemma~\ref{lem:tight}) and
+relabel so that $\tau_1\le\tau_2\le\dots\le\tau_m$. At $\tau_p$ the board
+holds $S_p$ pieces of $T_p$ and, for each $q<p$, at least one piece of
+$T_q$ or $T_q$ itself (persistence, since $\tau_q\le\tau_p$). Hence
+$S_p+(p-1)\le c$, i.e.
+\[
+k_p\;\le\;c+1-p+h_p\qquad(p=1,\dots,m).
+\]
+By Lemma~\ref{lem:score},
+\[
+\mathrm{score}=\sum_{p}(k_p-1)2^{k_p}-4\nfour\;\le\;\sum_{p}\Bigl[(k_p-1)2^{k_p}-4h_p\Bigr].
+\]
+For fixed $p$ the bracket, subject to $k_p\le c+1-p+h_p$, is largest with
+$h_p=1$ and $k_p=c+2-p$, worth $(c+1-p)2^{c+2-p}-4$; the alternative
+$h_p=0$, $k_p=c+1-p$ is worth $(c-p)2^{c+1-p}$, which is smaller for $p<c$
+and equal ($=0$) for $p=c$. All the terms are nonnegative, so filling the
+board ($m=c$) is best, and
+\[
+\mathrm{score}\;\le\;\sum_{p=1}^{c}\Bigl[(c+1-p)2^{c+2-p}-4\Bigr]
+=\sum_{k=2}^{c+1}(k-1)2^k-4c=\Phi_c-4c.
+\]
+Equality forces $k_p=c+2-p$ and $h_p=1$ with $h'_p=1$ for every $p$.
+\end{proof}
+
+\begin{corollary}\label{cor:4x4}
+On $4\times4$, $\mathrm{score}\le\Phi_{16}-64=3{,}932{,}164-64=3{,}932{,}100$.
+The numbers $3{,}932{,}164$ and $3{,}932{,}156$ are not attainable.
+\end{corollary}
+
+\begin{remark}
+The theorem uses only the number of cells, persistence, and one merge per
+tile per move. It holds for any adjacency structure, any spawn rule that
+offers the values 2 and 4, and in particular in possible play. The
+constraint that actually binds is that a tile of rank $k$ built from 2s
+alone needs $k$ cells at once, and the $c$ tiles of the top position must
+take their tight moments in decreasing order of size on a board that the
+larger ones are already sitting on.
+\end{remark}
+
+\subsection{Exact values on small boards}\label{sec:exact}
+
+The mass of a position grows by exactly the spawned value each move, so
+the state graph is a directed acyclic graph graded by mass, and can be
+enumerated one layer at a time with only the two open layers in memory.
+Kaneko and Yamashita \cite{kaneko2026} call this grading the age of a
+state. We implemented it (\texttt{test/solve.js}) with positions reduced
+by the board's symmetry group and, per position, the fewest spawned 4s
+and the fewest moves on any play reaching it; the maximum score is then
+$\max_B(\Phichain(B)-4\nfour^{\min}(B))$ by Lemma~\ref{lem:score}. The
+same layered pass, run backwards, strongly solves the honest game: the
+optimal expected score and, for each tile, the maximum probability of ever
+building it.
+
+\begin{table}[t]
+\centering\small
+\begin{tabular}{@{}lrrrrrr@{}}
+\toprule
+board & cells & positions & (raw) & max score & $\Phi_c-4c$ & $\Phi_c-8$ \\
+\midrule
+$2\times2$ & 4 & 110 & 662 & \textbf{180} & 180 & 188 \\
+$2\times3$ & 6 & 21{,}752 & 85{,}844 & \textbf{1{,}260} & 1{,}260 & 1{,}276 \\
+$2\times4$ & 8 & 4{,}980{,}767 & 19{,}920{,}382 & \textbf{7{,}140} & 7{,}140 & 7{,}164 \\
+$3\times3$ & 9 & 48{,}713{,}519 & 388{,}921{,}077 & \textbf{16{,}352} & 16{,}352 & 16{,}380 \\
+$4\times4$ & 16 & ? & ? & $\ge3{,}925{,}224$ & 3{,}932{,}100 & 3{,}932{,}156 \\
+\bottomrule
+\end{tabular}
+\caption{Exact maximum scores in possible play. ``positions'' counts
+reachable positions up to the board's symmetries (8 for squares, 4 for
+rectangles), ``raw'' without reduction. On every board up to nine cells
+the maximum equals the ceiling of Theorem~\ref{thm:score}, and the full
+chain is reached with exactly $c$ spawned 4s. The $3\times3$ count agrees
+with Yamashita et al.\ \cite{yamashita2022,kaneko2026}.}
+\label{tab:exact}
+\end{table}
+
+Table~\ref{tab:exact} summarises. On every board tested the ceiling is
+attained, always on the full chain, always with exactly one spawned 4 per
+tile; the fewest moves to every tile $2^k$ with $k\ge3$ equals $M(k)$ of
+Theorem~\ref{thm:moves}. The $3\times3$ enumeration gives
+$48{,}713{,}519$ positions, the number Yamashita, Kaneko and Nakayashiki
+report, which also fixes the convention of their count: positions up to
+the eight symmetries of the square. (Lees-Miller's ``about 25 million''
+for $3\times3$ counts differently.) The honest-game side of the same
+computation is in Table~\ref{tab:honest}.
+
+\begin{table}[t]
+\centering\small
+\begin{tabular}{@{}lrrl@{}}
+\toprule
+board & $\mathbb E[\text{score}]$, standard start & given a two-2s start & max probability of the largest tiles \\
+\midrule
+$2\times2$ & 66.96 & 67.70 & $16$: 96.25\%, \; $32$: 8.29\% \\
+$2\times3$ & 480.26 & 480.99 & $64$: 93.93\%, \; $128$: 5.70\% \\
+$2\times4$ & 2{,}641.87 & 2{,}642.60 & $256$: 86.98\%, \; $512$: 2.46\% \\
+$3\times3$ & 5{,}468.49 & TWO2S3X3 & $512$: 73.68\%, \; $1024$: 1.13\% \\
+\bottomrule
+\end{tabular}
+\caption{Strong solutions of the honest game (uniform empty cell, 90\%
+twos). The expected score is under the score-maximising policy; each tile
+probability is under the policy that maximises that probability. The
+two-2s column uses Kaneko and Yamashita's convention (their $4\times3$
+figure is $50{,}724.26$).}
+\label{tab:honest}
+\end{table}
+
+\subsection{The $4\times4$ board}\label{sec:fourbyfour}
+
+The $4\times4$ state space is out of reach of enumeration (Lees-Miller's
+month-long run \cite{leesmiller2017b} enumerated $1.3\cdot10^{12}$ states
+without finishing; the full game is far larger). What we have is a
+constructive lower bound. A generator (\texttt{test/gen\_perfect.js})
+walks a binary counter along the snake path into a corner, feeding 2s,
+and grants a spawned 4 only when a bounded look-ahead shows every pure-2
+continuation dying. It produced a line of $129{,}333$ moves ending on the
+full chain with $\nfour=1{,}735$, hence a score of
+\[
+\Phi_{16}-4\cdot1{,}735=3{,}932{,}164-6{,}940=3{,}925{,}224,
+\]
+$99.825\%$ of the ceiling and $6{,}876$ points short of it. The identities
+$\text{moves}=131{,}068-\nfour$ (all $129{,}333$ moves spawn 2 except the
+4s; mass $262{,}140=8+2\cdot\text{moves}+2\nfour$) and
+$\text{score}=3{,}932{,}164-4\nfour$ are verified by replay through the
+game engine in all four corners and both spiral orientations.
+
+Where do the $1{,}735$ go? The first act---building $131072$ on the
+empty board---spends exactly one, at its tight moment. The whole gap is in
+the second act, the chain $65536,\dots,4$ on the fifteen cells beside the
+$131072$: $295$ spawned 4s while building the $65536$ and $1{,}439$ below
+it, most of them with three to five empty cells still on the board. So the
+generator is not being squeezed by the pebbling bound; it is being squeezed
+by geometry within a cascade. When the counter overflows, the resulting
+chain of merges takes one move per level, a tile spawns during each of
+those moves, and the spawns land in the cells the cascade has just freed,
+alongside the tail of the chain. The bounded look-ahead cannot always see
+how to digest that junk with 2s alone and buys its way out with a 4.
+Theorem~\ref{thm:score} says the price of the second act is at least
+fifteen 4s; the small boards, which contain the same corner turns and the
+same overflow cascades in miniature, all pay exactly the theorem's price.
+
+\begin{conjecture}\label{conj}
+The maximum score in $4\times4$ 2048 is $3{,}932{,}100$, attained by a
+play with exactly sixteen spawned 4s.
+\end{conjecture}
+
+Two routes to settle it suggest themselves. The direct route is a better
+search for the second act: the target is a schedule that, at each level
+$k$ of the chain, builds the first copy of $2^{k-1}$ from 2s on the $k-1$
+free cells (which Lemma~\ref{lem:strahler} permits) and the second copy
+with a single 4 at its own tight moment, and that handles the overflow
+junk explicitly. The indirect route is Kaneko and Yamashita's enumeration:
+their layered pass over $4\times3$ can carry a two-byte ``fewest 4s''
+field at negligible cost and would settle the $4\times3$ maximum, which
+Theorem~\ref{thm:score} bounds by $\Phi_{12}-48=180{,}180$; we predict
+equality.
+
+\section{The undo button}\label{sec:undo}
+
+\subsection{The shipped lines}\label{sec:lines}
+
+Three lines were generated once and are shipped as data
+(\texttt{js/perfect\_line.js}, two hex characters per move: direction,
+spawn cell, spawn value): the $32{,}781$-move line to $131072$, the
+$65{,}533$-move line to the full chain, and the $129{,}333$-move maximum
+score line. The other three corners and the column-first spirals are the
+seven symmetries of the square applied to the same data. A replay through
+the real engine checks that every slide moves, every spawn cell is empty,
+and the counts land exactly.
+
+\subsection{What a perfect game costs in undos}
+
+Under honest odds a spawn lands in a required cell with a required value
+with probability $p=\tfrac{1}{e}\cdot q$, where $e$ is the number of empty
+cells after the slide and $q\in\{0.9,0.1\}$ the value's probability. With
+a re-randomising undo, the number of attempts is geometric and the expected
+number of undos for the move is $1/p-1$; summing over the line gives the
+exact expectation. The opening pair is the same problem once: two 4s in
+two prescribed cells happen with probability $2\cdot\frac1{16}\cdot\frac1{15}\cdot0.01$,
+one game in $12{,}000$, so the line to $131072$ starts with an expected
+$11{,}999$ restarts.
+
+\begin{center}\small
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+line & moves & $\mathbb E[\text{undos in play}]$ & $\mathbb E[\text{opening restarts}]$ & total \\
+\midrule
+$131072$ (all 4s) & 32{,}781 & 1{,}929{,}679 & 11{,}999 & 1{,}941{,}678 \\
+full chain (all 4s) & 65{,}533 & 3{,}521{,}967 & 11{,}999 & 3{,}533{,}966 \\
+maximum score (2s) & 129{,}333 & 658{,}984 & 147 & 659{,}131 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Measured runs match: the browser reports $1.91$--$1.97$ million undos for
+the $131072$ line. The maximum-score line is four times longer but three
+times cheaper in undos, because a 2 is nine times as likely as a 4.
+
+\section{Honest play}\label{sec:honest}
+
+For the full board we implemented an expectimax player (\textsc{Genius})
+in the tradition of Xiao's \cite{nneonneo2014}: rows and columns are
+table lookups over ranks, the heuristic scores empty cells, available
+merges, monotonicity and a tile-sum penalty, with a pull toward the chosen
+corner; depth adapts to the number of distinct tiles. Against Richardson's
+\cite{richardson2014} Evil generator, which places each new tile on the
+edge the last move packed against beside the largest neighbours, the
+search models that rule exactly instead of averaging over luck. We ported
+Richardson's four players (Smart, Algorithm, Priority, Random) and the
+generator to the same array engine for a like-for-like comparison. Ten
+games each, bottom-right corner:
+
+\begin{center}\small
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+player & regular tiles & Evil tiles & regular, undo to escape death \\
+\midrule
+\textsc{Genius} & 16384 $\times1$, 8192 $\times5$, 4096 $\times3$, 1024 $\times1$; 130{,}131 & 4096 $\times6$, 2048 $\times4$; 56{,}850 & 32768 $\times2$ (2 games) \\
+Smart & 4096 $\times3$, 2048 $\times6$, 1024 $\times1$; 46{,}029 & 1024 $\times4$, 512 $\times4$, 256 $\times2$; 8{,}410 & 16384 $\times3$, 8192 $\times2$ \\
+Algorithm & 512 $\times5$, 256 $\times2$, 128 $\times3$; 4{,}256 & 256/128/64; 2{,}011 & 1024 $\times6$, 512 $\times4$ \\
+Priority & 512 $\times1$, 256 $\times6$, 128 $\times2$, 16 $\times1$; 2{,}952 & 128/64; 1{,}284 & --- \\
+Random & 128 $\times6$, 64 $\times3$, 32 $\times1$; 983 & 128/64/32; 508 & 256 $\times9$, 512 $\times1$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Semicolons separate the largest-tile histogram from the average score. The
+last column is the undo button used as a human uses it: only to escape
+game over, each death unwinding a doubling number of moves, giving up
+after forty deaths without a new best score.
+
+\section{Open problems}
+
+\begin{enumerate}[nosep]
+\item Conjecture~\ref{conj}: a $4\times4$ play with sixteen spawned 4s.
+\item The maximum score of $4\times3$ (predicted $180{,}180$) and
+$2\times5$, within reach of layered enumeration.
+\item Whether Theorem~\ref{thm:score} is tight on \emph{every} board, and
+whether a uniform construction exists.
+\item Minimum undos: the expected undo count above is for the shipped
+lines; the line minimising expected undos (which would prefer spawns with
+many empty cells) is a different optimisation.
+\end{enumerate}
+
+\section*{Reproducibility}
+
+All code is in the repository \cite{superintelligence2026}. \texttt{node
+test/solve.js 3x3} reproduces Table~\ref{tab:exact} and
+Table~\ref{tab:honest} ($3\times3$ takes about five minutes);
+\texttt{PERFECT=1 node test/run.js} replays each shipped line through the
+game engine and asserts the exact counts (\texttt{GOAL=spiral|score},
+\texttt{ORIENT=col}); \texttt{node test/gen\_perfect.js} regenerates a line
+from nothing; \texttt{node test/honest.js} and \texttt{node
+test/honest\_drive.js} produce the honest-play table.
+
+\bibliographystyle{plain}
+\bibliography{refs}
+
+\end{document}

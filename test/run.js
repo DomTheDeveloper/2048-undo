@@ -104,11 +104,10 @@ function runPerfect(corner) {
          runner.stats.undos === 0 &&
          runner.stats.score === 3670024;
   } else if (goal === "score") {
-    // The mass-only ceiling (3,932,156) is geometrically unreachable:
-    // staging 2^k from 2s occupies k cells, and the board runs one
-    // short at every recursion level, each shortfall costing a spawned
-    // 4 (-4 points). The shipped line's own 4-count pins both numbers
-    // exactly: moves = 131,068 - n4, score = 3,932,164 - 4*n4.
+    // The proved ceiling is 3,932,100 (one spawned 4 per tile of the
+    // final chain, 16 in all; see paper/main.tex). The shipped line's
+    // own 4-count pins both numbers exactly: moves = 131,068 - n4,
+    // score = 3,932,164 - 4*n4.
     var sb = Super.perfectBook(corner, "score");
     var n4 = 0;
     if (sb) {
@@ -330,7 +329,7 @@ function runCorner(corner) {
     }
     ok = b[S[0]] === 131072 && dead && gm.score >= 3920000;
     console.log("[" + corner + "] score-goal: score=" + gm.score +
-      " (ceiling 3,932,156)  dead=" + dead);
+      " (ceiling 3,932,100)  dead=" + dead);
   } else if (goal === "spiral") {
     ok = Super.fullChain(b, S);
     console.log("[" + corner + "] spiral-goal: fullChain=" + ok +

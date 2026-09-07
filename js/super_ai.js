@@ -727,7 +727,7 @@
     if (!data) return null;
     // "tile" = the 32,781-move line to the 131072 tile; "full" = the
     // 65,533-move line to the complete spiral; "score" = the same
-    // spiral fed with 2s — 131,066 moves, the 3,932,156-point maximum.
+    // spiral fed with 2s — 129,333 moves, 3,925,224 points (ceiling 3,932,100).
     var hex = which === "full" ? data.full
             : which === "score" ? data.score
             : data.hex;
@@ -809,7 +809,7 @@
   //                costs 4 points), and after 131072 keep counting: stack
   //                the full descending chain 65536, 32768, ... beside it
   //                until the board dies full and mergeless. Theoretical
-  //                ceiling: 3,932,156 points.
+  //                ceiling: 3,932,100 points (16 spawned 4s are forced).
   // goal "spiral" — end on the full 131072 chain: build the tile, then
   //                  keep going until every power of two sits on the
   //                  board at once. 4-feeds; the fewest-moves road to

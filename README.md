@@ -139,12 +139,11 @@ And the goal picker:
   every spawned 4 forfeits 4 points. So this run feeds twos, and after
   folding the first spiral into 131072 it *keeps playing*, stacking the
   full descending chain beside it until the board dies full and
-  mergeless. The mass-only ceiling is 3,932,156 — but it turns out the
-  board's geometry cannot pay it (derivation below): the computed
-  line proves **3,925,224 points in 129,333 moves**, 99.82% of the
-  ceiling and the highest constructively verified score here. Same
-  death board as the SPIRAL goal — one final position, reached two
-  perfect ways.
+  mergeless. The ceiling is **3,932,100** — proved below: every one of
+  the sixteen tiles of the final chain needs at least one spawned 4 —
+  and the computed line scores **3,925,224 in 129,333 moves**, 99.83% of
+  it. Same death board as the SPIRAL goal — one final position, reached
+  two perfect ways.
 
 The engine (`js/super_ai.js`) plans a line of moves together with the
 spawn each move needs, then either re-rolls reality until it matches
@@ -246,33 +245,50 @@ move **32,784**, three later than the standalone minimum — a pure-4
 fold needs a few junk consolidations that 2-junk avoids, and the
 ledger silently absorbs them into the total.
 
-**Highest score — and why the folklore ceiling can't be paid.** Score
-is merge history: building 2^k entirely from 2s banks (k−1)·2^k
-points, and every spawned 4 skips a 2+2 merge, forfeiting exactly 4
-points. The maximum-score death board is *that same full chain*, worth
-Σₖ₌₂¹⁷ (k−1)·2^k = 3,932,164 points — and the usual derivation
-subtracts 8 for two "structurally forced" 4-spawns to get the widely
-quoted ceiling of **3,932,156**. That derivation only counts mass. It
-never asks whether the moves *fit on the board*, and they don't:
-staging 2^k from pure 2s occupies **k cells at its tightest moment**
-(the [16, 8, 4, 2, 2] instant is unavoidable — eager merging cannot
-compress it), and on the 15 cells beside the 131072 every "second
-half" of the rebuild is one cell short at every recursion level. Each
-shortfall can only be resolved by a spawned 4, and each spawned 4
-costs exactly 4 points. Generating the line under a strict
-last-resort-4 discipline (4s granted per decision only after every
-pure-2 option provably dies) lands at **1,735 four-spawns**: exactly
+**Highest score.** Score is merge history: building 2^k entirely from
+2s banks (k−1)·2^k points, and every spawned 4 skips a 2+2 merge,
+forfeiting exactly 4 points — at every moment of every game,
+score = Σ (k−1)·2^k over the tiles on the board − 4·(spawned 4s). The
+maximum-score death board is *that same full chain*, worth
+Σₖ₌₂¹⁷ (k−1)·2^k = 3,932,164, so the question is how many spawned 4s a
+game that ends on it must contain. Folklore offers 3,932,164 (none),
+3,932,156 (two) and 3,932,100 (sixteen, one per tile). The third is
+right, and it is a theorem (`paper/main.tex`): building a tile 2^k from
+2s alone needs k cells at once — its merge tree has Strahler number k,
+the register count of Ershov and Sethi–Ullman — and any spawned 4 in the
+tree drops that to k−1; the sixteen tiles of the final chain must take
+their tight moments in order of size on a board the bigger ones already
+sit on, which leaves the tile 2^k exactly k−1 cells. So each of the
+sixteen owns a spawned 4, and **score ≤ 3,932,164 − 64 = 3,932,100** on
+any 16-cell board. The same argument gives Φ_c − 4c on c cells, and
+exhaustive enumeration (`node test/solve.js 2x2|2x3|2x4|3x3`) shows it
+is attained on every board up to nine cells — always on the full chain,
+always with exactly one 4 per tile. The shipped 4×4 line, generated
+under a strict last-resort-4 discipline, lands at **1,735 four-spawns**:
 **129,333 moves** and **3,925,224 points**, pinned by the identities
-moves = 131,068 − n₄ and score = 3,932,164 − 4·n₄, and verified by
-full replay in all four corners. That is the highest constructively
-verified score for this board; the true minimum n₄ (somewhere between
-2 and 1,735) is, as far as we know, an open question.
+moves = 131,068 − n₄ and score = 3,932,164 − 4·n₄ and verified by full
+replay in every corner and both spiral orientations. It spends one 4 on
+the 131072 and all the rest inside the second act — the chain on the
+fifteen cells beside it — where overflow cascades leave junk the
+generator's bounded look-ahead cannot always digest with 2s. We
+conjecture the ceiling is attainable; the 6,876 missing points are an
+open search problem.
 
 So the perfections pull the same lever opposite ways on the same final
 board: **spawn 4s for the fewest moves (65,533, scoring 3,670,024),
 spawn 2s for the most points (3,925,224, in 129,333 moves).** One
 dial, both extremes, and perfect play takes each of them to its bound.
 
+`node test/solve.js 3x3` (also `2x2`, `2x3`, `2x4`) enumerates every
+reachable position of a small board layer by layer — the mass grows by
+exactly the spawned value each move, so the state graph is graded — and
+reports the exact maximum score, the fewest moves to every tile, the
+fewest spawned 4s to the full chain, and, running the same layers
+backwards, the optimal expected score and tile odds of the honest game.
+The 3×3 count of 48,713,519 positions (up to symmetry) matches the one
+Yamashita, Kaneko and Nakayashiki published when they strongly solved
+that board; Kaneko and Yamashita's 4×3 (1.15 trillion positions) is
+out of this machine's reach.
 `PERFECT=1 node test/run.js br bl tr tl` (add `ORIENT=col` for the
 column-first spirals) proves the tile line in about a tenth of a
 second per corner: it replays the shipped data through
@@ -291,8 +307,13 @@ Chains](https://jdlm.info/articles/2017/08/05/markov-chain-2048.html)
 Processes](https://jdlm.info/articles/2018/03/18/markov-decision-process-2048.html),
 [Threes!, Fives, 1024!, and 2048 are Hard](https://arxiv.org/abs/1505.04274),
 [Computational bounds for the 2048 game](https://arxiv.org/abs/2303.07266),
-and the community derivations of the maximum score (e.g. [Ask
+[Making Change in 2048](https://drops.dagstuhl.de/entities/document/10.4230/LIPIcs.FUN.2018.21)
+(Eppstein, FUN 2018 — the change-making view of the binary counter),
+[Strongly Solving 2048 4×3](https://arxiv.org/abs/2510.04580) (Kaneko
+and Yamashita, ICGA Journal 2026), and the community derivations of the
+maximum score (e.g. [Ask
 MetaFilter](https://ask.metafilter.com/269599/In-a-2048-or-Threes-like-game-what-is-the-highest-possible-score)).
+The write-up with proofs is `paper/main.pdf`.
 
 ### Contributions
 
