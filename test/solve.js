@@ -44,6 +44,10 @@ function coordsOf(i) { var c = []; for (var a = 0; a < DIMS.length; a++) { c.pus
 function indexOf(c) { var i = 0; for (var a = 0; a < DIMS.length; a++) i += c[a] * STRIDE[a]; return i; }
 var USE_SYM = process.env.SYM !== "0";
 var VERBOSE = process.env.VERBOSE === "1";
+// FORWARD_ONLY=1 skips the honest-game backward pass and frees each
+// layer as soon as it is closed, so memory stays at the open layers:
+// how 2x5 (about 1.5 billion positions) fits in a few hundred MB.
+var FORWARD_ONLY = process.env.FORWARD_ONLY === "1";
 if (!(C >= 2 && C <= 13)) throw new Error("board must have 2..13 cells");
 if (DIMS.some(function (n) { return !(n >= 1 && n === Math.floor(n)); })) throw new Error("bad board " + arg.join("x"));
 
@@ -207,7 +211,7 @@ for (var c1 = 0; c1 < C; c1++) for (var c2 = 0; c2 < C; c2++) {
 
 var afterSeen = new Map(); // mass -> Set of canonical afterstate keys (closed once mass processed)
 var totalStates = 0, totalRaw = 0, totalAfter = 0, totalAfterRaw = 0, deadStates = 0, deadRaw = 0;
-var bestScore = -1, bestScoreKey = 0, bestScoreMass = 0;
+var bestScore = -1, bestScoreKey = 0, bestScoreMass = 0, bestScoreN4 = 0;
 var minMovesToRank = [];   // rank -> fewest moves to a position containing it
 var minFoursToRank = [];   // rank -> fewest spawned 4s to a position containing it
 var maxRankSeen = 0;
@@ -283,7 +287,7 @@ while (true) {
     layerRaw += orb;
     var phi = phiOf(b);
     var sc = phi - 4 * sn4[i];
-    if (sc > bestScore) { bestScore = sc; bestScoreKey = sk[i]; bestScoreMass = m; }
+    if (sc > bestScore) { bestScore = sc; bestScoreKey = sk[i]; bestScoreMass = m; bestScoreN4 = sn4[i]; }
     var mr = maxRank(b);
     if (mr > maxRankSeen) maxRankSeen = mr;
     if (minMovesToRank[mr] === undefined || smv[i] < minMovesToRank[mr]) minMovesToRank[mr] = smv[i];
@@ -316,7 +320,7 @@ while (true) {
     }
     if (!any) { layerDead++; layerDeadRaw += orb; }
   }
-  layers.set(m, { keys: sk, n4: sn4, mv: smv, orbit: sorb });
+  if (!FORWARD_ONLY) layers.set(m, { keys: sk, n4: sn4, mv: smv, orbit: sorb });
   totalStates += n; totalRaw += layerRaw; deadStates += layerDead; deadRaw += layerDeadRaw;
   totalAfter += afterSet.size;
   if (afterSet.size) {
@@ -349,8 +353,7 @@ for (var r = 2; r <= maxRankSeen; r++) {
 decode(bestScoreKey, b);
 var bb = Array.from(b).map(function (r2) { return r2 ? 1 << r2 : 0; });
 console.log("  MAXIMUM SCORE: " + fmtInt(bestScore) + "  at mass " + bestScoreMass +
-  "  board " + JSON.stringify(bb) + "  (Phi " + fmtInt(phiOf(b)) + ", spawned 4s " + layers.get(bestScoreMass).n4[
-    Array.prototype.indexOf.call(layers.get(bestScoreMass).keys, bestScoreKey)] + ")");
+  "  board " + JSON.stringify(bb) + "  (Phi " + fmtInt(phiOf(b)) + ", spawned 4s " + bestScoreN4 + ")");
 var phiChain = 0;
 for (var kk = 2; kk <= C + 1; kk++) phiChain += (kk - 1) * (1 << kk);
 console.log("  full chain 2^" + (C + 1) + "..4: Phi = " + fmtInt(phiChain) +
@@ -383,6 +386,11 @@ function findIdx(keys, key) {
     if (keys[mid] < key) lo = mid + 1; else if (keys[mid] > key) hi = mid - 1; else return mid;
   }
   return -1;
+}
+if (FORWARD_ONLY) {
+  console.log("");
+  console.log("(FORWARD_ONLY=1: honest-game pass skipped)  forward " + ((Date.now() - t0) / 1000).toFixed(1) + "s");
+  process.exit(0);
 }
 var massList = Array.from(layers.keys()).sort(function (a, c) { return c - a; });
 var V = new Map();      // mass -> Float64Array expected score-to-go
