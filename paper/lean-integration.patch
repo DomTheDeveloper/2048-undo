@@ -1,0 +1,287 @@
+--- a/paper/main.tex
++++ b/paper/main.tex
+@@ -48,41 +48,33 @@
+ \begin{abstract}
+-We study 2048 under \emph{possible play}: the spawn sequence is treated as
+-part of the plan, which is exactly what a player with a re-randomising undo
+-button can realise, and exactly what ``possible with positive probability''
+-means for the ordinary game. We prove five things. (1)~On any board the
+-tile $2^n$ cannot appear before move $(2^n-8)/4+(n-2)$; the bound is
+-attained ($519$ for the 2048 tile, $32{,}781$ for the largest tile
+-$131072$ on $4\times4$), and every fastest $131072$ passes through the
+-same full board $65536,32768,\dots,8,4,4$ at move $32{,}766$ and folds it
+-in fifteen forced merges. (2)~On any board with $c$ cells the score is at
+-most $\Phi_c-4c$, $\Phi_c=\sum_{k=2}^{c+1}(k-1)2^k$: reaching the top
+-position costs one spawned~4 per tile, four points each; the proof is a
+-register-allocation (Strahler number) argument. For $4\times4$ this is
+-$3{,}932{,}100$, so the circulating $3{,}932{,}164$ and $3{,}932{,}156$ are
+-unattainable. (3)~No game lasts more than $2^{c+1}-4-c$ moves
+-($131{,}052$ on $4\times4$), and the longest games are the highest-scoring
+-games. (4)~Every game that ends on the full chain $131072,\dots,4$ ends
+-with two spawned 4s and the merge $4+4\to8$ from a full board, so the 4
+-always sits on the boundary beside the~8. (5)~The rules are equivariant
+-under the symmetries of the square and the eight corner snakes form one
+-orbit, so one computed line is eight perfect games. Exhaustive enumeration
+-confirms (1)--(4) on every board with at most nine cells, including the
+-$2\times2\times2$ cube of Das and Paul's higher-dimensional game---the
+-bounds are attained and every chain-producing move has the predicted
+-form---and reproduces, to the digit, the $48{,}713{,}519$ positions of
+-$3\times3$ reported by Yamashita, Kaneko and Nakayashiki. For $4\times4$ we describe
+-the algorithm that computed the shipped lines---a binary counter walked
+-along the snake, its length fixed in advance by a mass ledger---and what
+-is proved about its output: $32{,}781$ moves to $131072$ and $65{,}533$ to
+-the full chain, both optimal, and $129{,}333$ moves for $3{,}925{,}224$
+-points, $6{,}876$ short of the ceiling, which we conjecture is attainable.
+-The lines are published as plain-text witnesses (every slide, every
+-spawned tile) with a 160-line verifier that depends on nothing but the
+-rules; in particular, whether the standard game can reach $131072$ at all,
+-a question called open in 2017 and settled since only by an argument we
+-could not verify, now has a certificate.
+-Under honest 90/10 spawns the undo button must be pressed about $1.94$
+-million times to play the $32{,}781$-move line, a number we compute
+-exactly. We also strongly solve the boards up to nine cells and benchmark
+-an expectimax player against the classical heuristics on the full board.
++We study 2048 under \emph{possible play}: the spawn sequence is part of
++an existential plan, rather than an adversary or a random outcome that
++the player must control. For standard $4\times4$ 2048, we give an explicit
++legal trajectory to $131072$ in exactly $32{,}781$ moves and prove that
++no legal trajectory from any ordinary two-tile opening can be shorter.
++Both the complete witness and the universal lower bound are checked by
++Lean~4's kernel. When both starting tiles are required to be 2s, the
++exact minimum is $32{,}782$; a single preparatory move converts a suitable
++two-2s opening into the certificate's two-4s opening. These are
++existential optima, not guarantees against every random spawn sequence.
++
++The lower-bound argument uses mass above a doubling threshold, directly
++under the slide-and-spawn rules. The reachability theorem has no axiom
++dependencies; the exact-optimum theorem uses only Lean's standard
++\texttt{propext} and \texttt{Quot.sound} axioms. Plaintext witnesses and
++two independent executable replayers accompany the formal development.
++
++Separately, we derive a general minimum-move bound, a primed-board
++classification for fastest top-tile games, the score ceiling
++$\Phi_c-4c$ for a $c$-cell board with
++$\Phi_c=\sum_{k=2}^{c+1}(k-1)2^k$, and the game-length bound
++$2^{c+1}-4-c$. On $4\times4$ these ceilings are $3{,}932{,}100$ points
++and $131{,}052$ moves. We characterise the last move of full-chain games
++and the eight corner-snake symmetries. Enumeration checks the small
++boards, including the $2\times2\times2$ cube, and reproduces the
++published $3\times3$ state count. Our $4\times4$ full-chain witness
++uses $65{,}533$ moves; a score-oriented witness reaches $3{,}925{,}224$
++points, leaving attainment of the score ceiling conjectural. We also
++analyse re-randomising undo and honest-play agents. The Lean claim is
++limited to fixed-$4\times4$ reachability, minimum move counts, and their
++supporting lemmas; the remaining results are not thereby formally verified.
+ \end{abstract}
+@@ -129,3 +121,6 @@
+ of the minimum possible length, published as a text file that a short
+-independent program checks (Section~\ref{sec:certificate}). The third and fourth questions we have not seen
++independent program checks (Section~\ref{sec:certificate}). The same
++witness and a universal lower bound are now kernel-checked in Lean~4,
++along with the exact $32{,}782$-move optimum for two initial 2s
++(Section~\ref{sec:lean}). The third and fourth questions we have not seen
+ asked in print; their answers fall out of the same accounting.
+@@ -134,2 +129,8 @@
+ \begin{itemize}[nosep]
++\item Theorem~\ref{thm:leanexact}: a Lean-kernel-checked legal
++$32{,}781$-move trajectory to $131072$, a lower bound over all ordinary
++openings and legal plays, and the exact $32{,}782$-move optimum when
++both initial tiles are 2s. The formal semantics, threshold-mass argument,
++certificate generation, axiom audit, and reproducible build are described
++in Section~\ref{sec:lean}.
+ \item Theorem~\ref{thm:moves}: $2^n$ needs at least $(2^n-8)/4+(n-2)$
+@@ -241,4 +242,4 @@
+ 
+-\paragraph{What is new here.} The extremal questions of possible play do
+-not seem to have been treated as theorems before. Lees-Miller's 519 is the
++\paragraph{What is new here.} We distinguish numerical observations,
++abstract bounds, explicit legal trajectories, and formal verification. Lees-Miller's 519 is the
+ length of a path in a Markov chain built for the $4\times4$ board by always
+@@ -256,3 +257,4 @@
+ gets an independently checkable certificate on $4\times4$ together with
+-the exact fewest moves, and is joined by score and length ceilings that
++the exact fewest moves and a Lean-kernel-checked proof
++(Section~\ref{sec:lean}), and is joined by score and length ceilings that
+ hold in any dimension, all attained on the first three-dimensional board
+@@ -377,3 +379,5 @@
+ largest tile a board can hold, the fastest plays are far more constrained
+-than the theorem lets on: they all pass through one board.
++than the theorem lets on: they all pass through the same tile multiset.
++The fixed-$4\times4$ reachability and lower-bound claims are formalised
++in Section~\ref{sec:lean}; that section also handles the two-2s opening.
+ 
+@@ -768,3 +772,3 @@
+ 
+-\subsection{The $4\times4$ board}\label{sec:fourbyfour}
++\subsection{The \texorpdfstring{$4\times4$}{4x4} board}\label{sec:fourbyfour}
+ 
+@@ -927,6 +931,7 @@
+ Let a list of steps $(d_t,x_t,v_t)_{t=1}^{L}$ (direction, spawn cell,
+-spawn value) be replayed from two starting tiles under the rules of the
+-game. If every slide $d_t$ changes the board and every cell $x_t$ is empty
+-when its spawn is placed, then the list is a play of the honest game with
+-probability $\prod_{t}q_{v_t}/e_t>0$, where $e_t$ is the number of empty
++spawn value) be replayed from a permitted two-tile opening, with every
++$v_t\in\{2,4\}$. If every slide $d_t$ changes the board and every cell
++$x_t$ is empty when its spawn is placed, then the list is a legal play.
++Conditional on that opening and the prescribed directions, its spawn
++sequence has probability $\prod_{t}q_{v_t}/e_t>0$, where $e_t$ is the number of empty
+ cells after slide $t$ and $q_2=0.9$, $q_4=0.1$; its length, score and
+@@ -952,5 +957,7 @@
+ \begin{proof}
+-The replay is \texttt{test/gen\_perfect.js} (all four corners, at
+-generation time) and \texttt{PERFECT=1 node test/run.js} (through the
+-game's own engine, either orientation); \texttt{test/paper\_facts.js}
++The generator replays the lines in \texttt{test/gen\_perfect.js}
++(all four corners, at generation time). The independent replays are
++\texttt{verify/verify2048.py} and \texttt{test/replay\_engine.js};
++\texttt{PERFECT=1 node test/run.js} additionally checks the headless
++runner in either orientation; \texttt{test/paper\_facts.js}
+ checks the primed board and the last moves. The optimality claims are the
+@@ -995,2 +1002,4 @@
+ 
++\input{lean}
++
+ \subsection{Playing it}
+@@ -1200,3 +1209,3 @@
+ 
+-\section{Where the $4\times4$ game stands}\label{sec:recent}
++\section{Where the \texorpdfstring{$4\times4$}{4x4} game stands}\label{sec:recent}
+ 
+@@ -1229,3 +1238,4 @@
+ fewest moves to 2048 & 519, exact: \cite{leesmiller2017} and Theorem~\ref{thm:moves} \\
+-fewest moves to 131072 & $32{,}781$, exact: Theorem~\ref{thm:moves} and the shipped line; every such win passes the primed board (Lemma~\ref{lem:primed}) \\
++fewest moves to 131072 & $32{,}781$, exact and kernel-checked in Lean (Theorem~\ref{thm:leanexact}); primed-board classification proved separately (Lemma~\ref{lem:primed}) \\
++fewest moves to 131072, two initial 2s & $32{,}782$, exact and kernel-checked in Lean (Theorem~\ref{thm:leanexact}) \\
+ maximum score & between $3{,}925{,}224$ and $3{,}932{,}100$ (Theorems~\ref{thm:score}, \ref{thm:lines}); conjectured $3{,}932{,}100$ \\
+@@ -1259,5 +1269,7 @@
+ enumeration, which reaches $8192=2^{13}$; and on $4\times4$ by the
+-certificate of Section~\ref{sec:certificate}, which also has the
+-minimum possible length. A uniform construction with a proven invariant
+-for all rectangles is open, and it is not the naive one: a snake counter
++certificate of Section~\ref{sec:certificate}, whose legality and
++minimum length are kernel-checked in Section~\ref{sec:lean}. A uniform
++construction with a proven invariant remains an unresolved verification
++task in this work; the failed naive strategy alone does not establish
++that the general theorem is false or historically unsolved: a snake counter
+ that spawns at the far end of the frontier row and slides toward its head
+@@ -1305,5 +1317,7 @@
+ $2{,}034$), within reach of layered enumeration.
+-\item A proof that $2^{c+1}$ is reachable on every rectangular board,
+-i.e.\ a uniform strategy with a proven invariant (Das and Paul's
+-Theorem~1); and then whether Theorems~\ref{thm:moves}, \ref{thm:score}
++\item A fully specified, independently checked uniform construction for
++Das and Paul's claimed Theorem~1, that $2^{c+1}$ is reachable on every
++rectangular board. Our inability to complete their induction, and failure
++of one snake algorithm, are not disproofs of their claim. A separate question
++is whether Theorems~\ref{thm:moves}, \ref{thm:score}
+ and~\ref{thm:longest} are tight on \emph{every} board and in every
+@@ -1326,2 +1340,16 @@
+ 
++\paragraph{Formal proof.}
++Run \texttt{bash lean-kernel/check.sh} from the repository root with
++Python~3 and the pinned Lean~4.19.0 toolchain installed. The build
++regenerates all transition proofs from the plaintext witness, checks the
++universal lower bounds and both exact-optimum theorems, and writes
++\texttt{lean-kernel/verification.json} after successful checking.
++The sources, theorem identifiers, trust boundary, and completed core
++audit are documented in Section~\ref{sec:lean} and in
++\texttt{lean-kernel/README.md}. The two-2s witness can also be checked independently:
++\begin{quote}\small\ttfamily
++python3 verify/verify2048.py witness/131072-two-twos.txt
++\end{quote}
++
++\paragraph{Executable witnesses and experiments.}
+ \sloppy
+@@ -1332,3 +1360,3 @@
+ \texttt{PERFECT=1 node test/run.js} replays each shipped line through the
+-game engine and asserts the exact counts (\texttt{GOAL=spiral|score},
++headless runner and asserts the exact counts (\texttt{GOAL=spiral|score},
+ \texttt{ORIENT=col}); \texttt{python3 verify/verify2048.py witness/131072.txt} checks a
+--- a/paper/refs.bib
++++ b/paper/refs.bib
+@@ -247 +247,26 @@
+ }
++
++@inproceedings{demoura2021lean4,
++  author = {Leonardo de Moura and Sebastian Ullrich},
++  title = {The {Lean} 4 Theorem Prover and Programming Language},
++  booktitle = {Automated Deduction -- CADE 28},
++  series = {Lecture Notes in Computer Science},
++  volume = {12699},
++  pages = {625--635},
++  publisher = {Springer},
++  year = {2021},
++  note = {\url{https://doi.org/10.1007/978-3-030-79876-5_37}}
++}
++@misc{leanvalidation2026,
++  author = {{Lean FRO}},
++  title = {Validating a {Lean} Proof},
++  howpublished = {The Lean Language Reference, \url{https://lean-lang.org/doc/reference/latest/ValidatingProofs/}},
++  note = {Accessed 7 September 2026}
++}
++@misc{lean2048artifact2026,
++  author = {Dom the Developer},
++  title = {{Lean}-checked reachability and exact minimum move counts for 131072 in 2048},
++  year = {2026},
++  howpublished = {Source artifact, \url{https://github.com/DomTheDeveloper/2048-undo/tree/03ca3d181640a2c2a7685efc3ead4ff932d925e4/lean-kernel}},
++  note = {Complete audit of both exact optima: GitHub Actions run 34094095435}
++}
+--- a/README.md
++++ b/README.md
+@@ -2,2 +2,29 @@
+ A small clone of [1024](https://play.google.com/store/apps/details?id=com.veewo.a1024), based on [Saming's 2048](http://saming.fr/p/2048/) (also a clone), with Alok Menghrajani's undo mod — and an AI panel on top. [Play it here!](https://domthedeveloper.github.io/2048-undo/)
++
++### Lean-verified exact move counts
++
++**131072 is reachable in exactly 32,781 moves, and no legal game from any
++ordinary two-tile opening can reach it sooner. With two initial 2s, the
++exact minimum is 32,782.** These are existential optima over legal spawn
++sequences, not guaranteed wins against random spawns.
++
++The complete fixed-4×4 proofs are in [`lean-kernel/`](lean-kernel/README.md).
++The [paper](paper/main.pdf) integrates them in Section 6.5, including the
++formal rules, the direct threshold-mass lower bound, and the axiom audit.
++
++```sh
++bash lean-kernel/check.sh
++python3 verify/verify2048.py witness/131072-two-twos.txt
++```
++
++The rebuild uses pinned **Lean 4.19.0**, Python 3, and no Mathlib.
++Every one of the original 32,781 transitions is checked in the kernel;
++the two-2s theorem prepends one additional checked move. The reachability
++theorem has no axiom dependencies. Both exact-optimum theorems use only
++Lean's standard `propext` and `Quot.sound`, with no unfinished proofs,
++custom axioms, or native-evaluation proof oracle. See the
++[completed audit](lean-kernel/AUDIT.md) and
++[supplementary results](lean-kernel/COROLLARIES.md).
++The score, longest-game, and arbitrary-board claims elsewhere in this
++README are **not** part of this formalization.
+ 
+@@ -110,4 +137,5 @@
+   board dims and holds still until the finished position lands), the
+-  game only ever moves forward (**zero undos**), every spawn from the
+-  very first two tiles is a 4, and the line is **exactly 32,781
++  game only ever moves forward (**zero undos**), every spawn through the
++  primed-board construction is a 4 (the final fifteen moves may spawn
++  2s), and the line is **exactly 32,781
+   moves** — the provable minimum (derivation below). It isn't even
+@@ -358,3 +386,3 @@
+ embeds a small board in a larger one as if slides did not move whole
+-lines; a uniform construction with a proven invariant is open).
++lines; this work does not claim to verify the general construction).
+ `node test/gen_witness.js` regenerates the witnesses from the shipped
+@@ -371,5 +399,5 @@
+ `PERFECT=1 node test/run.js br bl tr tl` (add `ORIENT=col` for the
+-column-first spirals) proves the tile line in about a tenth of a
++column-first spirals) checks the tile line in about a tenth of a
+ second per corner: it replays the shipped data through
+-the real engine — every slide must actually move, every spawn cell
++the headless runner — every slide must actually move, every spawn cell
+ must be empty — and asserts exactly 32,781 moves with zero undos.
+@@ -403,3 +431,3 @@
+ MetaFilter](https://ask.metafilter.com/269599/In-a-2048-or-Threes-like-game-what-is-the-highest-possible-score)).
+-The write-up with proofs is `paper/main.pdf` — the theorems above, the
++The write-up with proofs is [paper/main.pdf](paper/main.pdf) — the theorems above, the
+ algorithm that computed the lines and what is proved about its output,
