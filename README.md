@@ -330,6 +330,14 @@ The 3×3 count of 48,713,519 positions (up to symmetry) matches the one
 Yamashita, Kaneko and Nakayashiki published when they strongly solved
 that board; Kaneko and Yamashita's 4×3 (1.15 trillion positions) is
 out of this machine's reach.
+`node test/solve.js 2x2x2` solves Das and Paul's three-dimensional
+2048 on the 2×2×2 cube (six directions, 48 symmetries) in fourteen
+seconds: every bound above is attained there too — 512 in exactly 133
+moves, max score 7,140, longest game 500, the full chain in 253 moves
+with eight spawned 4s — and the cube is a better board than the 2×4
+strip with the same eight cells (optimal expected score 2,953 vs
+2,642; a 512 tile with 6.3% vs 2.5%). Boxes of any dimension work
+(`2x2x2x2` would be 16 cells, i.e. out of reach).
 `PERFECT=1 node test/run.js br bl tr tl` (add `ORIENT=col` for the
 column-first spirals) proves the tile line in about a tenth of a
 second per corner: it replays the shipped data through
@@ -351,7 +359,16 @@ Processes](https://jdlm.info/articles/2018/03/18/markov-decision-process-2048.ht
 [Making Change in 2048](https://drops.dagstuhl.de/entities/document/10.4230/LIPIcs.FUN.2018.21)
 (Eppstein, FUN 2018 — the change-making view of the binary counter),
 [Strongly Solving 2048 4×3](https://arxiv.org/abs/2510.04580) (Kaneko
-and Yamashita, ICGA Journal 2026), and the community derivations of the
+and Yamashita, ICGA Journal 2026), [Analysis of the Game "2048" and its
+Generalization in Higher Dimensions](https://arxiv.org/abs/1804.07393)
+(Das and Paul, 2018 — the top tile 2^(cells+1) is reachable on any
+board in any dimension), [Solving the 3×3 Variant of
+2048](https://probabilitysports.com/2048.html) (an independent 3×3
+solution whose expected score and tile odds match ours to the digit),
+the 2025 preprints [2048: Reinforcement Learning in a Delayed Reward
+Environment](https://arxiv.org/abs/2507.05465) and [Merge and Conquer:
+Evolutionarily Optimizing AI for 2048](https://arxiv.org/abs/2510.20205),
+and the community derivations of the
 maximum score (e.g. [Ask
 MetaFilter](https://ask.metafilter.com/269599/In-a-2048-or-Threes-like-game-what-is-the-highest-possible-score)).
 The write-up with proofs is `paper/main.pdf` — the theorems above, the

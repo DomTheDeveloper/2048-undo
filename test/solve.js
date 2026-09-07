@@ -26,36 +26,54 @@
 
 "use strict";
 
+// Boards are boxes of any dimension: "3x3", "2x4", "2x2x2" (Das and
+// Paul's higher-dimensional 2048, arXiv:1804.07393), "2x2x2x2", ...
+// A slide moves every line parallel to one axis toward one of its two
+// walls, so a d-dimensional box has 2d directions. Cell index =
+// sum of coordinate_i * stride_i with stride_0 = 1 (for W x H that is
+// the game's y * W + x).
 var arg = (process.argv[2] || "3x3").toLowerCase().split("x");
-var W = Number(arg[0]), H = Number(arg[1] || arg[0]);
-var C = W * H;
+var DIMS = arg.map(Number);
+if (DIMS.length === 1) DIMS.push(DIMS[0]);
+var W = DIMS[0], H = DIMS[1];
+var C = DIMS.reduce(function (a, b) { return a * b; }, 1);
+var NDIR = 2 * DIMS.length;
+var STRIDE = [];
+(function () { var st = 1; for (var i = 0; i < DIMS.length; i++) { STRIDE.push(st); st *= DIMS[i]; } })();
+function coordsOf(i) { var c = []; for (var a = 0; a < DIMS.length; a++) { c.push(i % DIMS[a]); i = (i - c[a]) / DIMS[a]; } return c; }
+function indexOf(c) { var i = 0; for (var a = 0; a < DIMS.length; a++) i += c[a] * STRIDE[a]; return i; }
 var USE_SYM = process.env.SYM !== "0";
 var VERBOSE = process.env.VERBOSE === "1";
 if (!(C >= 2 && C <= 13)) throw new Error("board must have 2..13 cells");
+if (DIMS.some(function (n) { return !(n >= 1 && n === Math.floor(n)); })) throw new Error("bad board " + arg.join("x"));
 
 function fmtInt(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
 
 // ---------------------------------------------------------------- lines
 // For each direction, the cells as lines ordered from the wall the tiles
-// move toward. 0 up, 1 right, 2 down, 3 left (game_manager.js codes).
-var LINES = [[], [], [], []];
+// move toward. Direction 2a slides axis a toward coordinate 0, 2a+1
+// toward the far wall; for W x H that is up, down, left, right (the
+// solver never needs the game's own direction codes).
+var LINES = [];
 (function () {
-  for (var x = 0; x < W; x++) {
-    var up = [], down = [];
-    for (var y = 0; y < H; y++) { up.push(y * W + x); down.push((H - 1 - y) * W + x); }
-    LINES[0].push(up); LINES[2].push(down);
-  }
-  for (var y2 = 0; y2 < H; y2++) {
-    var left = [], right = [];
-    for (var x2 = 0; x2 < W; x2++) { left.push(y2 * W + x2); right.push(y2 * W + (W - 1 - x2)); }
-    LINES[3].push(left); LINES[1].push(right);
+  for (var a = 0; a < DIMS.length; a++) {
+    var toward0 = [], towardFar = [];
+    for (var i = 0; i < C; i++) {
+      var c = coordsOf(i);
+      if (c[a] !== 0) continue;
+      var line = [];
+      for (var k = 0; k < DIMS[a]; k++) { c[a] = k; line.push(indexOf(c)); }
+      toward0.push(line);
+      towardFar.push(line.slice().reverse());
+    }
+    LINES.push(toward0); LINES.push(towardFar);
   }
 })();
 
 // Slide `b` (ranks, 0 = empty) in direction d into `out`. Returns the
 // score gained, or -1 if nothing moved. Same rules as game_manager.js:
 // one merge per tile per move, merges resolved from the wall outward.
-var vals = new Uint8Array(Math.max(W, H));
+var vals = new Uint8Array(Math.max.apply(null, DIMS));
 function slide(b, d, out) {
   var moved = false, gain = 0;
   var lines = LINES[d];
@@ -83,27 +101,39 @@ function slide(b, d, out) {
 }
 
 // ------------------------------------------------------------ symmetries
-// Index permutations: image[i] = source cell of cell i.
+// The symmetry group of the box: every permutation of axes that maps
+// the box onto itself (axes of equal length may be swapped) combined
+// with a reflection of any subset of axes. 8 for a square, 4 for a
+// rectangle, 48 for a cube. Index permutations: image[i] = source cell
+// of cell i.
 var SYMS = (function () {
   var out = [];
-  function add(f) {
-    var p = new Uint8Array(C);
-    for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) {
-      var s = f(x, y);
-      p[s.y * W + s.x] = y * W + x;
+  var d = DIMS.length;
+  var perms = [];
+  (function permute(cur, used) {
+    if (cur.length === d) { perms.push(cur.slice()); return; }
+    for (var a = 0; a < d; a++) {
+      if (used[a] || DIMS[a] !== DIMS[cur.length]) continue;
+      used[a] = true; cur.push(a); permute(cur, used); cur.pop(); used[a] = false;
     }
-    out.push(p);
-  }
-  add(function (x, y) { return { x: x, y: y }; });
-  add(function (x, y) { return { x: W - 1 - x, y: y }; });
-  add(function (x, y) { return { x: x, y: H - 1 - y }; });
-  add(function (x, y) { return { x: W - 1 - x, y: H - 1 - y }; });
-  if (W === H) {
-    add(function (x, y) { return { x: y, y: x }; });
-    add(function (x, y) { return { x: W - 1 - y, y: x }; });
-    add(function (x, y) { return { x: y, y: H - 1 - x }; });
-    add(function (x, y) { return { x: W - 1 - y, y: H - 1 - x }; });
-  }
+  })([], []);
+  perms.forEach(function (perm) {
+    for (var mask = 0; mask < (1 << d); mask++) {
+      var p = new Uint8Array(C);
+      for (var i = 0; i < C; i++) {
+        var c = coordsOf(i), img = new Array(d);
+        for (var a = 0; a < d; a++) {
+          var v = c[a];
+          if (mask & (1 << a)) v = DIMS[a] - 1 - v;
+          img[perm[a]] = v; // axis a of the source becomes axis perm[a]
+        }
+        p[indexOf(img)] = i;
+      }
+      out.push(p);
+    }
+  });
+  // the identity first, so SYM=0 keeps exactly it
+  out.sort(function (x, y) { var ix = 0, iy = 0; for (var i = 0; i < C; i++) { if (x[i] !== i) ix = 1; if (y[i] !== i) iy = 1; } return ix - iy; });
   return USE_SYM ? out : [out[0]];
 })();
 
@@ -186,6 +216,13 @@ var chainKey = null, chainMass = 0, chainN4 = -1, chainMv = -1;
 // once, mass = 2*n2 + 4*n4), so the longest play to a position uses the
 // fewest 4s, and the longest game is the maximum over positions.
 var longestMoves = -1, longestKey = 0, longestMass = 0;
+// Every move that produces the full chain, by signature: the parent's
+// multiset, whether the parent is full, the number of merges and their
+// total, and the spawned value. The paper's last-move proposition says
+// there is exactly one signature: the chain from 16 up plus two 4s,
+// full, one merge worth 8, spawn 4.
+var chainEndings = new Map();
+function tilesOf(x) { var t = 0; for (var i = 0; i < C; i++) if (x[i]) t++; return t; }
 var t0 = Date.now();
 
 // The full chain 2^(C+1) ... 2^2 (one tile per cell) is the maximum-Phi
@@ -206,6 +243,14 @@ function isFullChain(b) {
   return true;
 }
 
+function noteEnding(parent, tiles, merges, gain, spawn, orbit) {
+  var vals = [];
+  for (var i = 0; i < C; i++) if (parent[i]) vals.push(1 << parent[i]);
+  vals.sort(function (a, c) { return c - a; });
+  var sig = "parent [" + vals.join(",") + "] " + (tiles === C ? "full" : "not full") +
+    ", " + merges + " merge(s) worth " + gain + ", spawn " + spawn;
+  chainEndings.set(sig, (chainEndings.get(sig) || 0) + orbit);
+}
 var b = new Uint8Array(C), after = new Uint8Array(C), nb = new Uint8Array(C);
 var masses = Array.from(open.keys()).sort(function (a, c) { return a - c; });
 var mIdx = 0;
@@ -250,17 +295,22 @@ while (true) {
     var lp = m / 2 - sn4[i] - 2;
     if (lp > longestMoves) { longestMoves = lp; longestKey = sk[i]; longestMass = m; }
     var any = false;
-    for (var d = 0; d < 4; d++) {
+    var nearChain = m + 4 >= chainMass; // only the last layers can produce the chain
+    var tilesB = nearChain ? tilesOf(b) : 0;
+    for (var d = 0; d < NDIR; d++) {
       var gain = slide(b, d, after);
       if (gain < 0) continue;
       any = true;
       afterSet.add(canonKey(after));
+      var mergesHere = nearChain ? tilesB - tilesOf(after) : 0;
       for (var c = 0; c < C; c++) {
         if (after[c]) continue;
         after[c] = 1;
         relax(m + 2, canonKey(after), sn4[i], smv[i] + 1);
+        if (nearChain && isFullChain(after)) noteEnding(b, tilesB, mergesHere, gain, 2, sorb[i]);
         after[c] = 2;
         relax(m + 4, canonKey(after), sn4[i] + 1, smv[i] + 1);
+        if (nearChain && isFullChain(after)) noteEnding(b, tilesB, mergesHere, gain, 4, sorb[i]);
         after[c] = 0;
       }
     }
@@ -281,7 +331,7 @@ while (true) {
 }
 
 console.log("");
-console.log("=== " + W + "x" + H + " (" + C + " cells) " + (USE_SYM ? "up to " + SYMS.length + " symmetries" : "no symmetry reduction") + " ===");
+console.log("=== " + DIMS.join("x") + " (" + C + " cells, " + NDIR + " directions) " + (USE_SYM ? "up to " + SYMS.length + " symmetries" : "no symmetry reduction") + " ===");
 console.log("reachable positions: " + fmtInt(totalStates) + " canonical, " + fmtInt(totalRaw) + " raw");
 console.log("afterstates:         " + fmtInt(totalAfter) + " canonical, " + fmtInt(totalAfterRaw) + " raw");
 console.log("dead positions:      " + fmtInt(deadStates) + " canonical, " + fmtInt(deadRaw) + " raw");
@@ -309,6 +359,10 @@ console.log("  full chain 2^" + (C + 1) + "..4: Phi = " + fmtInt(phiChain) +
 if (chainN4 >= 0) {
   console.log("  full chain: fewest moves " + fmtInt(chainMv) + " (all-4 ledger 2^cells-3 = " + fmtInt(Math.pow(2, C) - 3) +
     "), longest play to it " + fmtInt(chainMass / 2 - chainN4 - 2));
+}
+if (chainEndings.size) {
+  console.log("  every move that produces the full chain (raw count):");
+  chainEndings.forEach(function (n, sig) { console.log("    " + sig + "  x" + fmtInt(n)); });
 }
 decode(longestKey, b);
 var lb = Array.from(b).map(function (r3) { return r3 ? 1 << r3 : 0; });
@@ -351,7 +405,7 @@ massList.forEach(function (m) {
     var bestP = new Float64Array(TARGETS.length);
     for (var t = 0; t < TARGETS.length; t++) bestP[t] = mr >= TARGETS[t] ? 1 : 0;
     var alreadyAll = mr >= TARGETS[TARGETS.length - 1];
-    for (var d = 0; d < 4; d++) {
+    for (var d = 0; d < NDIR; d++) {
       var gain = slide(b, d, after);
       if (gain < 0) continue;
       var empt = 0;

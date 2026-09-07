@@ -66,9 +66,11 @@ with two spawned 4s and the merge $4+4\to8$ from a full board, so the 4
 always sits on the boundary beside the~8. (5)~The rules are equivariant
 under the symmetries of the square and the eight corner snakes form one
 orbit, so one computed line is eight perfect games. Exhaustive enumeration
-shows (1)--(4) are tight on every board with at most nine cells and
-reproduces, to the digit, the $48{,}713{,}519$ positions of $3\times3$
-reported by Yamashita, Kaneko and Nakayashiki. For $4\times4$ we describe
+confirms (1)--(4) on every board with at most nine cells, including the
+$2\times2\times2$ cube of Das and Paul's higher-dimensional game---the
+bounds are attained and every chain-producing move has the predicted
+form---and reproduces, to the digit, the $48{,}713{,}519$ positions of
+$3\times3$ reported by Yamashita, Kaneko and Nakayashiki. For $4\times4$ we describe
 the algorithm that computed the shipped lines---a binary counter walked
 along the snake, its length fixed in advance by a mass ledger---and what
 is proved about its output: $32{,}781$ moves to $131072$ and $65{,}533$ to
@@ -112,9 +114,14 @@ numbers circulate: $3{,}932{,}164$ (pure mass accounting), $3{,}932{,}156$
 4-spawn per tile of the final position). Our own earlier README argued
 for a ceiling of $3{,}932{,}156$ and claimed geometry prevents paying it.
 That claim was half right: geometry does prevent it, but the right ceiling
-is $3{,}932{,}100$, and we prove it. The third and fourth questions we
-have not seen asked in print; their answers fall out of the same
-accounting.
+is $3{,}932{,}100$, and we prove it. Even the largest tile has a history:
+the tile-count argument that caps it at $131072$ is old, but whether the
+spatial rules let a game actually reach it was still being called open
+in 2017 \cite{leesmiller2017c}; Das and Paul \cite{daspaul2018} proved it
+can for general boards, and the line shipped with this paper is an
+explicit, machine-checked certificate for the standard game, of the
+minimum possible length. The third and fourth questions we have not seen
+asked in print; their answers fall out of the same accounting.
 
 \paragraph{Contributions.}
 \begin{itemize}[nosep]
@@ -195,6 +202,33 @@ technique being to partition the state space by the sum of tile values
 $3\times3$, reproduces their position count exactly
 (Section~\ref{sec:exact}).
 
+\paragraph{Higher dimensions.} Das and Paul \cite{daspaul2018} analysed
+2048 on $n_1\times n_2$ boards and on $d$-dimensional boxes
+$n_1\times\dots\times n_d$: they showed that the largest tile $2^{c+1}$,
+$c$ the number of cells, can be reached on every such board, and gave
+strategies for the tile-placing adversary and, under conditions, for the
+player. Our arguments use nothing of a board beyond its cell count and
+the fact that a slide acts line by line, so Theorems~\ref{thm:moves},
+\ref{thm:score} and~\ref{thm:longest} and
+Proposition~\ref{prop:lastmove} hold verbatim in every dimension, and
+Section~\ref{sec:recent} solves their $2\times2\times2$ cube exactly:
+every bound is attained there too.
+
+\paragraph{Recent preprints.} Saligram, Bhathal and Manihani
+\cite{saligram2025} compare four deep reinforcement learning agents
+(DQN, PPO, QR-DQN and a distributional ``Horizon-DQN''); the preprint
+reports the last reaching a 4096 tile with a best score of $41{,}828$,
+and has since been withdrawn by its authors pending regenerated results.
+Bai, Kim Cohen, Koss and Lichtenbaum \cite{bai2025} evolve 2048 players
+with large language models, either by meta-prompting a
+``thinker''/``executor'' pair, which did not improve, or by refining the
+value function of a limited Monte Carlo tree search, which gained about
+$473$ points per cycle. An independent strong solution of the
+$3\times3$ board \cite{probabilitysports} reports an optimal expected
+score of $5{,}468.5$ and tile probabilities of $99.571\%$, $73.677\%$ and
+$1.134\%$ for 256, 512 and 1024, which agree with Table~\ref{tab:honest}
+to every digit shown.
+
 \paragraph{What is new here.} The extremal questions of possible play do
 not seem to have been treated as theorems before. Lees-Miller's 519 is the
 length of a path in a Markov chain built for the $4\times4$ board by always
@@ -208,7 +242,10 @@ change-making number. The longest game (Theorem~\ref{thm:longest}), the
 forced ending of every full-chain game (Proposition~\ref{prop:lastmove}),
 the eight-spirals statement (Theorem~\ref{thm:eight}), the exact undo
 expectations (Proposition~\ref{prop:undo}) and the exact small-board
-values of Table~\ref{tab:exact} are, as far as we can tell, new; the
+values of Table~\ref{tab:exact} are, as far as we can tell, new; Das and
+Paul's reachability of the top tile is sharpened to the exact fewest
+moves and joined by score and length ceilings that hold in any
+dimension, all attained on the first three-dimensional board solved; the
 maximum-score figures $3{,}932{,}164$ and $3{,}932{,}156$ that circulate
 are shown to be unattainable; and the $3\times3$ count of Yamashita et
 al.\ is independently reproduced. The snake strategy in one corner is
@@ -512,7 +549,25 @@ larger ones are already sitting on.
 
 Inequality \eqref{eq:rank} is worth more than the score bound. It bounds
 the ranks of the final tiles by their tight-moment order, and so it says
-what the top position is and what it costs to get there.
+what the top tile and the top position are and what they cost.
+
+\begin{corollary}[the top tile]\label{cor:toptile}
+On a board with $c$ cells no tile exceeds $2^{c+1}$. Every tile
+$2^{c+1}$ has a spawned 4 among its leaves, and at some moment during its
+construction every cell of the board holds one of its pieces.
+\end{corollary}
+\begin{proof}
+A tile of rank $k$ has Strahler number $k$ or $k-1$
+(Lemma~\ref{lem:strahler}) and needs that many cells at its tight moment
+(Lemma~\ref{lem:tight}), so $k-1\le c$; for $k=c+1$ the Strahler number
+must be $c$, which forces a 4-leaf, and the tight moment fills the board.
+\end{proof}
+
+That $131072$ is the largest tile of $4\times4$ 2048 is folklore, and
+Das and Paul \cite{daspaul2018} proved the bound and its attainability
+for boards of any shape and dimension; this is a two-line proof of the
+bound that says a little more: the $131072$ is never built from 2s alone,
+and there is a moment when it owns the whole board.
 
 \begin{corollary}[the top position]\label{cor:top}
 On a board with $c$ cells:
@@ -597,11 +652,13 @@ the slide moves to, leaving the far end cell empty---the only empty cell
 on the board, where the final 4 spawns: (iv).
 \end{proof}
 
-Proposition~\ref{prop:lastmove} is verified exhaustively on $2\times2$
-and $2\times3$ (every one of the 16, respectively 112, moves that produce
-the full chain has this form) and on all the shipped lines, whose last
-three moves are $4+4\to8$, $8+8\to16$, $4+4\to8$ with four spawned 4s in a
-row (Figure~\ref{fig:lastmove}). On $4\times4$ it says that in
+Proposition~\ref{prop:lastmove} is verified exhaustively on every board
+of Table~\ref{tab:exact} with at most nine cells---all $16$, $112$, $912$
+and $4{,}224$ moves that produce the full chain on $2\times2$, $2\times3$,
+$2\times4$ and $3\times3$, and all $9{,}216$ on the $2\times2\times2$
+cube, have this form---and on the shipped lines, whose last three moves
+are $4+4\to8$, $8+8\to16$, $4+4\to8$ with four spawned 4s in a row
+(Figure~\ref{fig:lastmove}). On $4\times4$ it says that in
 \emph{every} reachable arrangement of the full chain the 4 is one of the
 twelve boundary cells and shares a row or column with the 8. The snake
 arrangements of Section~\ref{sec:eight} put the 4 at a corner with the 8
@@ -644,16 +701,18 @@ $2\times2$ & 4 & 110 & 662 & \textbf{180} & 180 & 188 & 13 & \textbf{24} & 24 \\
 $2\times3$ & 6 & 21{,}752 & 85{,}844 & \textbf{1{,}260} & 1{,}260 & 1{,}276 & 61 & \textbf{118} & 118 \\
 $2\times4$ & 8 & 4{,}980{,}767 & 19{,}920{,}382 & \textbf{7{,}140} & 7{,}140 & 7{,}164 & 253 & \textbf{500} & 500 \\
 $3\times3$ & 9 & 48{,}713{,}519 & 388{,}921{,}077 & \textbf{16{,}352} & 16{,}352 & 16{,}380 & 509 & \textbf{1{,}011} & 1{,}011 \\
+$2\times2\times2$ & 8 & 702{,}581 & 32{,}187{,}234 & \textbf{7{,}140} & 7{,}140 & 7{,}164 & 253 & \textbf{500} & 500 \\
 $4\times4$ & 16 & ? & ? & $\ge3{,}925{,}224$ & 3{,}932{,}100 & 3{,}932{,}156 & 65{,}533 & $\ge129{,}333$ & 131{,}052 \\
 \bottomrule
 \end{tabular}
 \caption{Exact extremes of possible play. ``positions'' counts reachable
-positions up to the board's symmetries (8 for squares, 4 for rectangles),
-``raw'' without reduction; ``chain in'' is the fewest moves to the full
+positions up to the board's symmetries (8 for squares, 4 for rectangles,
+48 for the cube), ``raw'' without reduction; ``chain in'' is the fewest moves to the full
 chain ($2^c-3$, Corollary~\ref{cor:chain}); ``longest'' the longest game
-(Theorem~\ref{thm:longest}). On every board up to nine cells the maximum
-score equals the ceiling of Theorem~\ref{thm:score}, the full chain is
-reached with exactly $c$ spawned 4s, and the longest game equals the bound.
+(Theorem~\ref{thm:longest}). On every board up to nine cells, the
+three-dimensional one included, the maximum score equals the ceiling of
+Theorem~\ref{thm:score}, the full chain is reached with exactly $c$
+spawned 4s, and the longest game equals the bound.
 The $3\times3$ count agrees with Yamashita et al.\
 \cite{yamashita2022,kaneko2026}. The $4\times4$ row holds the bounds of
 this paper and the shipped lines.}
@@ -683,13 +742,16 @@ $2\times2$ & 66.96 & 67.70 & $16$: 96.25\%, \; $32$: 8.29\% \\
 $2\times3$ & 480.26 & 480.99 & $64$: 93.93\%, \; $128$: 5.70\% \\
 $2\times4$ & 2{,}641.87 & 2{,}642.60 & $256$: 86.98\%, \; $512$: 2.46\% \\
 $3\times3$ & 5{,}468.49 & 5{,}469.21 & $512$: 73.68\%, \; $1024$: 1.13\% \\
+$2\times2\times2$ & 2{,}953.42 & 2{,}954.15 & $256$: 94.04\%, \; $512$: 6.32\% \\
 \bottomrule
 \end{tabular}
 \caption{Strong solutions of the honest game (uniform empty cell, 90\%
 twos). The expected score is under the score-maximising policy; each tile
 probability is under the policy that maximises that probability. The
 two-2s column uses Kaneko and Yamashita's convention (their $4\times3$
-figure is $50{,}724.26$).}
+figure is $50{,}724.26$). The $3\times3$ row agrees with the independent
+solution of \cite{probabilitysports}. The cube has six directions, and
+with the same eight cells is a better board than the $2\times4$ strip.}
 \label{tab:honest}
 \end{table}
 
@@ -764,7 +826,11 @@ Lemma~\ref{lem:mass} turns the two move-minimal targets into fixed-length
 problems. Under all-4 spawns the mass after $m$ moves is $8+4m$, so the
 primed board of Lemma~\ref{lem:primed} (mass $131{,}072$) is reached after
 exactly $32{,}766$ moves on \emph{every} route that reaches it at all, and
-the full chain (mass $262{,}140$) after exactly $65{,}533$. The generator
+the full chain (mass $262{,}140$) after exactly $65{,}533$. The tile count
+is pinned too: two tiles at the start, one more per spawn, one fewer per
+merge, sixteen on the primed board, so the build performs exactly
+$2+32{,}766-16=32{,}752$ merges in its $32{,}766$ moves---a carry on
+all but fourteen of them. The generator
 therefore never optimises length. It has to find a route on which every
 spawn is a 4, and the ledger does the rest; the program asserts
 $8+4\cdot\text{steps}=\mass$ at every checkpoint and refuses any line that
@@ -821,7 +887,7 @@ cannot cycle; a cap on the number of stalls bounds the work.
 \paragraph{The fold.} From the primed board the program searches the
 cascade of Lemma~\ref{lem:primed} by iterative deepening over total length:
 each move either advances the cascade by exactly the next doubling (a junk
-merge $2+2$ may ride along) or consolidates junk without touching the
+merge may ride along) or consolidates junk without touching the
 cascade, and the values spawned during the fold, 2 or 4, are chosen so
 that junk never lines up into an accidental merge that would displace the
 cascade. The primed board fills the board completely, so every junk spawn
@@ -1085,16 +1151,90 @@ last column is the undo button used as a human uses it: only to escape
 game over, each death unwinding a doubling number of moves, giving up
 after forty deaths without a new best score.
 
+\section{Where the $4\times4$ game stands}\label{sec:recent}
+
+Kaneko and Yamashita's strong solution of $4\times3$ \cite{kaneko2026}
+had to enumerate $1.15\cdot10^{12}$ positions for twelve cells. For the
+sixteen cells of the standard board nobody knows the count: Lees-Miller's
+combinatorial bound is about $4.4\cdot10^{16}$ positions for the game up
+to the 2048 tile and is known to be a large over-estimate
+\cite{leesmiller2017c}, and his enumeration ran through
+$1.3\cdot10^{12}$ positions in a month without finishing
+\cite{leesmiller2017b}. \emph{Strongly} solving $4\times4$---the
+optimal move in every reachable position and hence the optimal expected
+score and the optimal probability of every tile---is out of reach of this
+paper and, as far as we know, of any current computation; the layered
+pass of Section~\ref{sec:exact} is the right shape for it (it is
+Kaneko and Yamashita's), and the obstacle is purely size. What the
+previous sections settle is the other half of ``perfect 2048'', the
+possible-play half. Table~\ref{tab:status} lists both halves.
+
+\begin{table}[t]
+\centering\footnotesize
+\begin{tabular}{@{}p{0.43\textwidth}p{0.53\textwidth}@{}}
+\toprule
+question, standard $4\times4$ game & status \\
+\midrule
+optimal move in every position; optimal expected score & open; $4\times3$ solved \cite{kaneko2026}; boards up to nine cells and the cube solved here (Table~\ref{tab:honest}) \\
+a strategy reaching 2048 with high probability & yes, probability $\ge0.99969$ \cite{slizkov2023} \\
+a tile reachable with certainty & 256 \cite{slizkov2023}; the optimal probability of each larger tile is open \\
+largest tile & $131072$: bound folklore and \cite{daspaul2018}, Corollary~\ref{cor:toptile}; reachable, \cite{daspaul2018} and the certificate of Theorem~\ref{thm:lines}(a) \\
+fewest moves to 2048 & 519, exact: \cite{leesmiller2017} and Theorem~\ref{thm:moves} \\
+fewest moves to 131072 & $32{,}781$, exact: Theorem~\ref{thm:moves} and the shipped line; every such win passes the primed board (Lemma~\ref{lem:primed}) \\
+maximum score & between $3{,}925{,}224$ and $3{,}932{,}100$ (Theorems~\ref{thm:score}, \ref{thm:lines}); conjectured $3{,}932{,}100$ \\
+longest game & between $129{,}333$ and $131{,}052$ (Theorems~\ref{thm:longest}, \ref{thm:lines}) \\
+the full chain $131072,\dots,4$ & reachable, in exactly $65{,}533$ moves at the fewest (Corollary~\ref{cor:chain}); eight spiral arrangements reachable (Theorem~\ref{thm:eight}); every reachable arrangement has its 4 on the boundary beside the 8 (Proposition~\ref{prop:lastmove}); which other arrangements are reachable is open \\
+probability that an honest game reaches 131072 & open; at least $10^{-57{,}047}$, the probability of the shipped line (Proposition~\ref{prop:cert}) \\
+number of reachable positions & open; more than $1.3\cdot10^{12}$ \cite{leesmiller2017b} \\
+\bottomrule
+\end{tabular}
+\caption{What is known about the standard game, September 2026.}
+\label{tab:status}
+\end{table}
+
+\paragraph{Predictions for $4\times3$.} Kaneko and Yamashita's pass
+carries, per position, what the optimal policy needs. Adding a two-byte
+``fewest spawned 4s'' field and a ``fewest moves'' field would decide
+the possible-play half of $4\times3$ at negligible cost, and this paper
+predicts the answers: the largest tile $8192$ in $M(13)=2{,}057$ moves
+and not fewer; the full chain $8192,\dots,4$ in $2^{12}-3=4{,}093$ moves
+at the fewest and with exactly twelve spawned 4s at the fewest; a maximum
+score of $\Phi_{12}-48=180{,}180$; a longest game of $2^{13}-16=8{,}176$
+moves; and $4{,}4\to8$ from a full board as the last move of every
+full-chain play. Every one of these predictions has held on every board
+we could solve.
+
+\paragraph{Three dimensions.} Das and Paul's game on a
+$2\times2\times2$ cube has eight cells, six directions and a symmetry
+group of order 48. Our solver handles boxes of any dimension (a slide is
+the same line rule along any axis), and the cube takes fourteen seconds:
+$702{,}581$ positions up to symmetry, $32{,}187{,}234$ raw. Every bound
+of this paper is attained on it: the largest tile $512=2^{9}$ is reached
+in exactly $M(9)=133$ moves, the maximum score is
+$\Phi_8-32=7{,}140$, the longest game is $2^9-12=500$ moves, the full
+chain needs $253=2^8-3$ moves and eight spawned 4s, and all $9{,}216$
+chain-producing moves are $4+4\to8$ from a full board. In the honest
+game the cube is a better board than the $2\times4$ strip with the same
+eight cells: an optimal expected score of $2{,}953.42$ against
+$2{,}641.87$, a 256 tile with probability $94.04\%$ against $86.98\%$,
+and a 512 with $6.32\%$ against $2.46\%$. Six directions beat four.
+
 \section{Open problems}\label{sec:open}
 
 \begin{enumerate}[nosep]
+\item Strongly solving $4\times4$ (Table~\ref{tab:status}): the optimal
+expected score and the optimal probability of each tile, in particular of
+$131072$, for which only the trivial lower bound of the shipped line is
+known.
 \item Conjecture~\ref{conj}: a $4\times4$ play with sixteen spawned 4s,
 equivalently a $131{,}052$-move game.
 \item The maximum score and longest game of $4\times3$ (predicted
 $180{,}180$ and $8{,}176$) and $2\times5$ (predicted $36{,}828$ and
 $2{,}034$), within reach of layered enumeration.
 \item Whether Theorems~\ref{thm:score} and~\ref{thm:longest} are tight on
-\emph{every} board, and whether a uniform construction exists.
+\emph{every} board and in every dimension, and whether a uniform
+construction exists; the $2\times2\times3$ box (twelve cells) is the
+next three-dimensional case, at the scale of $4\times3$.
 \item Which arrangements of the full chain are reachable on $4\times4$?
 At least the eight spirals are; every reachable one has its 4 on the
 boundary beside the 8 (Proposition~\ref{prop:lastmove}). Can the
@@ -1113,7 +1253,8 @@ many empty cells) is a different optimisation.
 \sloppy
 All code is in the repository \cite{superintelligence2026}. \texttt{node
 test/solve.js 3x3} reproduces Table~\ref{tab:exact} and
-Table~\ref{tab:honest} ($3\times3$ takes about five minutes);
+Table~\ref{tab:honest} ($3\times3$ takes about five minutes;
+\texttt{2x2x2} fourteen seconds);
 \texttt{PERFECT=1 node test/run.js} replays each shipped line through the
 game engine and asserts the exact counts (\texttt{GOAL=spiral|score},
 \texttt{ORIENT=col}); \texttt{node test/paper\_facts.js} checks
