@@ -8,7 +8,7 @@
   color: #f9f6f2;
 }
 
-.super-row1 { text-align: center; }
+.super-row1 { text-align: left; }
 
 .super-toggle {
   display: inline-block;
@@ -54,18 +54,23 @@ h1.title {
   margin: 0 0 14px 0;
 }
 
+/* Under the name: Try again on the left, the scores on the right. */
+.above-game {
+  display: -webkit-flex;
+  display: flex;
+  -webkit-align-items: center;
+  align-items: center;
+  -webkit-justify-content: space-between;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
 .scores-container {
   float: none;
-  text-align: center;
+  text-align: right;
 }
 
 .score-container, .best-container { margin-top: 0; }
-
-.above-game {
-  display: block;
-  text-align: center;
-  margin-bottom: 16px;
-}
 
 .restart-button {
   display: inline-block;
@@ -73,10 +78,9 @@ h1.title {
   float: none;
 }
 
-.game-explanation,
-.container > hr + p {
-  text-align: center;
-}
+.game-explanation { text-align: center; }
+
+.container > hr + p { text-align: left; }
 
 .container > hr {
   border: none;
@@ -252,12 +256,12 @@ h1.title {
   padding-top: 10px;
   border-top: 1px solid rgba(238, 228, 218, 0.25);
   font-size: 13px;
-  text-align: center;
+  text-align: left;
 }
 
 .super-hud .super-stat {
   display: inline-block;
-  margin: 0 12px;
+  margin-right: 22px;
   white-space: nowrap;
 }
 

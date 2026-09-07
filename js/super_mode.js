@@ -13,7 +13,7 @@
 
   var Super = window.Super2048;
   var BASE_MPS = 8; // moves per second at 1x
-  var BUILD = "6";  // bump with index.html's ?v= so browsers refetch the scripts
+  var BUILD = "7";  // bump with index.html's ?v= so browsers refetch the scripts
 
   var TILES = ["evil", "regular", "perfect"];
   var UNDOS = ["disabled", "regular", "perfect"];
@@ -70,14 +70,12 @@
     return allowed.indexOf(value) >= 0 ? value : fallback;
   }
 
-  // Saved choices (the old single "mode" pref maps onto the new rows:
-  // SUPER was regular tiles + perfect undo, the others perfect tiles).
-  var legacyMode = loadPref("super2048.mode", null);
+  // Saved choices, defaulting to the showpiece run: the computed line
+  // to the full spiral, up out of the bottom-right corner, at 100x.
   controller.corner = pick(loadPref("super2048.corner", "br"), CORNERS, "br");
-  controller.orient = pick(loadPref("super2048.orient", "row"), ORIENTS, "row");
-  controller.speed = pick(loadPref("super2048.speed", "afap"), SPEEDS, "afap");
-  controller.tiles = pick(loadPref("super2048.tiles",
-    legacyMode && legacyMode !== "super" ? "perfect" : "regular"), TILES, "regular");
+  controller.orient = pick(loadPref("super2048.orient", "col"), ORIENTS, "col");
+  controller.speed = pick(loadPref("super2048.speed", "100"), SPEEDS, "100");
+  controller.tiles = pick(loadPref("super2048.tiles", "perfect"), TILES, "perfect");
   controller.undo = pick(loadPref("super2048.undo", "perfect"), UNDOS, "perfect");
   controller.algo = pick(loadPref("super2048.algo", "genius"), ALGOS, "genius");
   controller.goal = pick(loadPref("super2048.goal", "spiral"), GOALS, "spiral");
@@ -760,13 +758,6 @@
     if (name === "finale") controller.finaleMode = value;
     else controller[name] = value;
     savePref("super2048." + name, value);
-    if (name === "tiles" && value === "perfect") {
-      // The instant computed run is PERFECT's default experience;
-      // picking a rendered speed afterwards plays the whole book on
-      // the visible grid instead.
-      controller.speed = "headless";
-      savePref("super2048.speed", controller.speed);
-    }
     updateControls();
   }
 
