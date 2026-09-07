@@ -13,7 +13,7 @@
 
   var Super = window.Super2048;
   var BASE_MPS = 8; // moves per second at 1x
-  var BUILD = "7";  // bump with index.html's ?v= so browsers refetch the scripts
+  var BUILD = "8";  // bump with index.html's ?v= so browsers refetch the scripts
 
   var TILES = ["evil", "regular", "perfect"];
   var UNDOS = ["disabled", "regular", "perfect"];
