@@ -360,6 +360,13 @@ lines; a uniform construction with a proven invariant is open).
 `node test/gen_witness.js` regenerates the witnesses from the shipped
 data.
 
+`FORWARD_ONLY=1 node test/solve.js 2x5` solves the ten-cell board's
+possible-play half in three hours (1.8 billion positions up to
+symmetry, only the open layers in memory): 2048 in exactly 519 moves —
+the same number as on 4×4, since the formula only sees the tile — max
+score 36,828, longest game 2,034, the chain in 1,021 moves with ten 4s,
+and all 11,136 chain-producing moves of the predicted form. Its honest
+game needs every layer and did not fit in 13 GB.
 `node test/solve.js 2x2x2` solves Das and Paul's three-dimensional
 2048 on the 2×2×2 cube (six directions, 48 symmetries) in fourteen
 seconds: every bound above is attained there too — 512 in exactly 133
