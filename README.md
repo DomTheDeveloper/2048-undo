@@ -219,7 +219,11 @@ almost every single move, with just a handful of merge-free
 repositioning slides. Then the spiral folds: the
 cascade 8, 16, 32, … 131072 is 15 forced merges, one per move (a slide
 merges equal *adjacent* pairs only, and the chain offers exactly one
-per step), proven minimal by exhaustive search. Total:
+per step). Forced is the word: the paper's primed-board lemma proves
+that *every* 32,781-move win, whatever its route, shows exactly the
+full board 65536, 32768, … 8, 4, 4 after move 32,766 and then merges
+4+4, 8+8, … 65536+65536 in that order — the arrangement is the only
+freedom, and ours is the snake. Total:
 
 > **minMoves(2^n) = (2^n − 8)/4 + (n − 2)**, so
 > **minMoves(131072) = 32,766 + 15 = 32,781 = 2^15 + 13.**
@@ -279,12 +283,49 @@ board: **spawn 4s for the fewest moves (65,533, scoring 3,670,024),
 spawn 2s for the most points (3,925,224, in 129,333 moves).** One
 dial, both extremes, and perfect play takes each of them to its bound.
 
+**Longest game.** The same ledger answers a question nobody seems to
+have asked in print: a game's length is mass/2 − (spawned 4s) − 2, the
+full chain is the unique maximum-mass position, and it costs at least
+one spawned 4 per tile — so **no 2048 game lasts more than
+2^(c+1) − 4 − c moves, 131,052 on 4×4**, and the longest games *are*
+the maximum-score games up to their last spawn (a final 2 instead of
+the 4 changes neither length nor score). Exact on every small board
+(24, 118, 500 and 1,011 moves on 2×2, 2×3, 2×4, 3×3); the 129,333-move
+score line is the longest 4×4 game we know of, and the conjecture
+above is equivalently "a 131,052-move game exists".
+
+**The last move.** Every game that ends on the full chain ends the
+same way, on any board: the last spawn is the chain's 4, the one
+before it is a 4 too, and the last slide is played from a *full* board
+holding 131072 … 16 and two 4s, merging exactly 4+4 → 8 and freeing
+the far end of that line for the final 4. So in every reachable
+arrangement of the chain the 4 is on the boundary, in the row or column
+of the 8 — the snake's tail at a corner beside its 8 is exactly that.
+Verified exhaustively on 2×2 and 2×3 (every one of the 16, resp. 112,
+chain-producing moves) and on all three shipped lines, whose last three
+moves are 4+4, 8+8, 4+4 with four spawned 4s in a row.
+
+**Eight spirals.** The slide rules commute with the eight symmetries of
+the square (a slide is one fixed 1-D rule per line, read from the wall;
+a symmetry maps lines to lines and walls to walls), so a symmetry maps
+any play to a play of the same length, score and undo cost. The corner
+snakes — start corner plus the side the chain first runs along — form a
+single orbit of that group, and the stabiliser of a snake is trivial,
+so one computed line is eight perfect games with eight distinct final
+spirals: any corner for the 131072, the chain leaving it along either
+side. That is what the two pickers in the AI panel choose. (Of the 52
+Hamiltonian paths out of a corner, two are corner snakes; which other
+arrangements of the chain are reachable is open.)
+
 `node test/solve.js 3x3` (also `2x2`, `2x3`, `2x4`) enumerates every
 reachable position of a small board layer by layer — the mass grows by
 exactly the spawned value each move, so the state graph is graded — and
-reports the exact maximum score, the fewest moves to every tile, the
-fewest spawned 4s to the full chain, and, running the same layers
-backwards, the optimal expected score and tile odds of the honest game.
+reports the exact maximum score, the longest game, the fewest moves to
+every tile and to the full chain, the fewest spawned 4s to the full
+chain, and, running the same layers backwards, the optimal expected
+score and tile odds of the honest game. `node test/paper_facts.js`
+checks the primed board, the last move and the eight-spiral orbit
+against the shipped lines and, exhaustively, the tiny boards.
 The 3×3 count of 48,713,519 positions (up to symmetry) matches the one
 Yamashita, Kaneko and Nakayashiki published when they strongly solved
 that board; Kaneko and Yamashita's 4×3 (1.15 trillion positions) is
@@ -313,7 +354,10 @@ Processes](https://jdlm.info/articles/2018/03/18/markov-decision-process-2048.ht
 and Yamashita, ICGA Journal 2026), and the community derivations of the
 maximum score (e.g. [Ask
 MetaFilter](https://ask.metafilter.com/269599/In-a-2048-or-Threes-like-game-what-is-the-highest-possible-score)).
-The write-up with proofs is `paper/main.pdf`.
+The write-up with proofs is `paper/main.pdf` — the theorems above, the
+algorithm that computed the lines and what is proved about its output,
+and the final spiral drawn in all eight orientations (`paper/figs.tex`
+is generated from the engine's snake tables by `node test/gen_figs.js`).
 
 ### Contributions
 

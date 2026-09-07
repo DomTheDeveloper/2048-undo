@@ -181,7 +181,11 @@ var bestScore = -1, bestScoreKey = 0, bestScoreMass = 0;
 var minMovesToRank = [];   // rank -> fewest moves to a position containing it
 var minFoursToRank = [];   // rank -> fewest spawned 4s to a position containing it
 var maxRankSeen = 0;
-var chainKey = null, chainMass = 0, chainN4 = -1;
+var chainKey = null, chainMass = 0, chainN4 = -1, chainMv = -1;
+// The longest play: a play's length is mass/2 - n4 - 2 (each move spawns
+// once, mass = 2*n2 + 4*n4), so the longest play to a position uses the
+// fewest 4s, and the longest game is the maximum over positions.
+var longestMoves = -1, longestKey = 0, longestMass = 0;
 var t0 = Date.now();
 
 // The full chain 2^(C+1) ... 2^2 (one tile per cell) is the maximum-Phi
@@ -239,7 +243,12 @@ while (true) {
     if (mr > maxRankSeen) maxRankSeen = mr;
     if (minMovesToRank[mr] === undefined || smv[i] < minMovesToRank[mr]) minMovesToRank[mr] = smv[i];
     if (minFoursToRank[mr] === undefined || sn4[i] < minFoursToRank[mr]) minFoursToRank[mr] = sn4[i];
-    if (isFullChain(b) && (chainN4 < 0 || sn4[i] < chainN4)) { chainN4 = sn4[i]; chainKey = sk[i]; }
+    if (isFullChain(b)) {
+      if (chainN4 < 0 || sn4[i] < chainN4) { chainN4 = sn4[i]; chainKey = sk[i]; }
+      if (chainMv < 0 || smv[i] < chainMv) chainMv = smv[i];
+    }
+    var lp = m / 2 - sn4[i] - 2;
+    if (lp > longestMoves) { longestMoves = lp; longestKey = sk[i]; longestMass = m; }
     var any = false;
     for (var d = 0; d < 4; d++) {
       var gain = slide(b, d, after);
@@ -297,6 +306,14 @@ for (var kk = 2; kk <= C + 1; kk++) phiChain += (kk - 1) * (1 << kk);
 console.log("  full chain 2^" + (C + 1) + "..4: Phi = " + fmtInt(phiChain) +
   (chainN4 >= 0 ? "  reachable, fewest spawned 4s " + chainN4 + "  -> score " + fmtInt(phiChain - 4 * chainN4)
                 : "  NOT reachable"));
+if (chainN4 >= 0) {
+  console.log("  full chain: fewest moves " + fmtInt(chainMv) + " (all-4 ledger 2^cells-3 = " + fmtInt(Math.pow(2, C) - 3) +
+    "), longest play to it " + fmtInt(chainMass / 2 - chainN4 - 2));
+}
+decode(longestKey, b);
+var lb = Array.from(b).map(function (r3) { return r3 ? 1 << r3 : 0; });
+console.log("  LONGEST GAME: " + fmtInt(longestMoves) + " moves  (theorem bound 2^(cells+1)-4-cells = " +
+  fmtInt(Math.pow(2, C + 1) - 4 - C) + ")  ending on " + JSON.stringify(lb) + " at mass " + longestMass);
 console.log("  folklore ceilings: Phi-8 (two forced 4s) = " + fmtInt(phiChain - 8) +
   ",  Phi-4*cells (one 4 per chain tile) = " + fmtInt(phiChain - 4 * C));
 
