@@ -36,7 +36,7 @@ jobs:
                   t.extractall('.', filter='data')
               subprocess.run(['git', 'apply', '--check', 'research/manuscript.patch'], check=True)
               subprocess.run(['git', 'apply', 'research/manuscript.patch'], check=True)
-          with zipfile.ZipFile('/tmp/recovered-research.zip', 'w', zipfile.ZIP_DEFLATED) as z:
+          with zipfile.ZipFile('/tmp/recovered-research.zip', 'w', zipfile.ZIP_DEFLATED, strict_timestamps=False) as z:
               for p in pathlib.Path('.').rglob('*'):
                   if p.is_file() and '.git' not in p.parts:
                       z.write(p, p.as_posix())
