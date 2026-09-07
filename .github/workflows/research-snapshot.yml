@@ -1,0 +1,19 @@
+name: Research source snapshot
+on:
+  push:
+    branches: [research/extremal-deductions]
+    paths: [.github/workflows/research-snapshot.yml]
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: git archive --format=zip --output=research-source.zip HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: research-source
+          path: research-source.zip
+          retention-days: 7
