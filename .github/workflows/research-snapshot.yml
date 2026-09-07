@@ -1,0 +1,19 @@
+name: Research baseline snapshot
+on:
+  push:
+    branches: [research/extremal-2048]
+    paths: [.github/workflows/research-snapshot.yml]
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: git archive --format=zip --output=/tmp/2048-research-baseline.zip HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: research-baseline
+          path: /tmp/2048-research-baseline.zip
+          retention-days: 7
