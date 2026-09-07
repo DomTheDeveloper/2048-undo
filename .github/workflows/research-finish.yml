@@ -8,7 +8,7 @@ permissions:
   contents: write
 concurrency:
   group: finish-2048-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   finish:
     if: github.ref == 'refs/heads/research/extremal-deductions'
@@ -43,6 +43,7 @@ jobs:
       - name: Reproduce the finite checks and match all formal inputs to the completed local audit
         run: |
           set -euo pipefail
+          mkdir -p research/results
           bash research/finish.sh --computations-only | tee research/results/publication-checks.log
           python3 - <<'PY'
           import hashlib,json,pathlib
