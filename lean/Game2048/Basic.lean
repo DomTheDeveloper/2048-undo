@@ -58,13 +58,17 @@ def compact : List Nat → List Nat
   | [] => []
   | v :: vs => if v = 0 then compact vs else v :: compact vs
 
-/-- Merge adjacent equal inputs once. A newly produced tile is never reconsidered. -/
-def merge : List Nat → List Nat
+/-- Merge adjacent equal inputs once. A newly produced tile is never reconsidered.
+The recursion is structural, so kernel reduction needs no well-founded proof unfolding. -/
+def merge (xs : List Nat) : List Nat :=
+  match xs with
   | [] => []
-  | [a] => [a]
-  | a :: b :: rest =>
-    if a = b then (a+b) :: merge rest else a :: merge (b :: rest)
-termination_by xs => xs.length
+  | a :: rest =>
+    match rest with
+    | [] => [a]
+    | b :: tail =>
+      if a = b then (a+b) :: merge tail else a :: merge rest
+termination_by structural xs
 
 theorem compact_heavy (xs : List Nat) (k : Nat) :
     heavyList k (compact xs) = heavyList k xs := by
