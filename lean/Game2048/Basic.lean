@@ -53,22 +53,66 @@ def heavyList (k : Nat) : List Nat → Nat
   | [] => 0
   | v :: vs => heavyTile k v + heavyList k vs
 
+theorem heavyList_mono_double (xs : List Nat) (k : Nat) :
+    heavyList (2*k) xs ≤ heavyList k xs := by
+  induction xs with
+  | nil => exact Nat.le_refl _
+  | cons a xs ih =>
+    have ha := heavyTile_mono_double k a
+    simp only [heavyList]
+    omega
+
 /-- Remove empty cells, preserving the order of the other tiles. -/
 def compact : List Nat → List Nat
   | [] => []
   | v :: vs => if v = 0 then compact vs else v :: compact vs
 
-/-- Merge adjacent equal inputs once. A newly produced tile is never reconsidered.
-The recursion is structural, so kernel reduction needs no well-founded proof unfolding. -/
-def merge (xs : List Nat) : List Nat :=
-  match xs with
-  | [] => []
-  | a :: rest =>
-    match rest with
-    | [] => [a]
-    | b :: tail =>
-      if a = b then (a+b) :: merge tail else a :: merge rest
-termination_by structural xs
+/-- Structural recursion on fuel. Each recursive call consumes at least
+one input tile, so input length is sufficient fuel. A newly created tile
+is prepended to the output and never merged again in the same slide. -/
+def mergeFuel : Nat → List Nat → List Nat
+  | 0, xs => xs
+  | _+1, [] => []
+  | _+1, [a] => [a]
+  | fuel+1, a :: b :: rest =>
+    if a = b then (a+b) :: mergeFuel fuel rest
+    else a :: mergeFuel fuel (b :: rest)
+
+def merge (xs : List Nat) : List Nat := mergeFuel xs.length xs
+
+/-- Declarative left-to-right, non-chaining pair-merge rules. -/
+inductive PairMerge : List Nat → List Nat → Prop where
+  | nil : PairMerge [] []
+  | single (a : Nat) : PairMerge [a] [a]
+  | equal {a : Nat} {xs ys : List Nat} :
+      PairMerge xs ys → PairMerge (a :: a :: xs) ((a+a) :: ys)
+  | different {a b : Nat} {xs ys : List Nat} :
+      a ≠ b → PairMerge (b :: xs) ys → PairMerge (a :: b :: xs) (a :: ys)
+
+/-- The evaluator implements the declarative pair-merge rules whenever fuel suffices. -/
+theorem mergeFuel_spec (fuel : Nat) (xs : List Nat) (h : xs.length ≤ fuel) :
+    PairMerge xs (mergeFuel fuel xs) := by
+  induction fuel generalizing xs with
+  | zero =>
+    have hx : xs = [] := List.length_eq_zero.mp (by omega)
+    subst xs
+    exact PairMerge.nil
+  | succ fuel ih =>
+    cases xs with
+    | nil => exact PairMerge.nil
+    | cons a xs =>
+      cases xs with
+      | nil => exact PairMerge.single a
+      | cons b rest =>
+        have htail : rest.length ≤ fuel := by simp only [List.length_cons] at h; omega
+        have hrest : (b :: rest).length ≤ fuel := by simp only [List.length_cons] at *; omega
+        by_cases hab : a = b
+        · subst b
+          simpa only [mergeFuel, if_pos rfl] using PairMerge.equal (a := a) (ih rest htail)
+        · simpa only [mergeFuel, if_neg hab] using PairMerge.different hab (ih (b :: rest) hrest)
+
+theorem merge_spec (xs : List Nat) : PairMerge xs (merge xs) :=
+  mergeFuel_spec xs.length xs (Nat.le_refl _)
 
 theorem compact_heavy (xs : List Nat) (k : Nat) :
     heavyList k (compact xs) = heavyList k xs := by
@@ -86,41 +130,52 @@ theorem compact_length (xs : List Nat) : (compact xs).length ≤ xs.length := by
   | cons a xs ih =>
     by_cases h : a = 0 <;> simp [compact, h] <;> omega
 
+theorem mergeFuel_heavy (fuel : Nat) (xs : List Nat) (k : Nat) :
+    heavyList (2*k) (mergeFuel fuel xs) ≤ heavyList k xs := by
+  induction fuel generalizing xs with
+  | zero => exact heavyList_mono_double xs k
+  | succ fuel ih =>
+    cases xs with
+    | nil => simp [mergeFuel, heavyList]
+    | cons a xs =>
+      cases xs with
+      | nil => simpa [mergeFuel, heavyList] using heavyTile_mono_double k a
+      | cons b rest =>
+        by_cases h : a = b
+        · subst b
+          have hh := Nat.add_le_add_left (ih rest) (heavyTile k a + heavyTile k a)
+          simpa [mergeFuel, heavyList, heavyTile_double, Nat.add_assoc] using hh
+        · have ht := ih (b :: rest)
+          have ha := heavyTile_mono_double k a
+          simp only [mergeFuel, if_neg h, heavyList] at *
+          omega
+
 /-- A merge cannot increase mass above a threshold that doubles this round. -/
 theorem merge_heavy (xs : List Nat) (k : Nat) :
-    heavyList (2*k) (merge xs) ≤ heavyList k xs := by
-  cases xs with
-  | nil => simp [merge, heavyList]
-  | cons a xs =>
-    cases xs with
-    | nil => simpa [merge, heavyList] using heavyTile_mono_double k a
-    | cons b rest =>
-      by_cases h : a = b
-      · subst b
-        have ih := merge_heavy rest k
-        have hh := Nat.add_le_add_left ih (heavyTile k a + heavyTile k a)
-        simpa [merge, heavyList, heavyTile_double, Nat.add_assoc] using hh
-      · have ih := merge_heavy (b :: rest) k
-        have ha := heavyTile_mono_double k a
-        simp only [merge, if_neg h, heavyList] at *
-        omega
-termination_by xs.length
+    heavyList (2*k) (merge xs) ≤ heavyList k xs :=
+  mergeFuel_heavy xs.length xs k
 
-theorem merge_length (xs : List Nat) : (merge xs).length ≤ xs.length := by
-  cases xs with
-  | nil => simp [merge]
-  | cons a xs =>
+theorem mergeFuel_length (fuel : Nat) (xs : List Nat) :
+    (mergeFuel fuel xs).length ≤ xs.length := by
+  induction fuel generalizing xs with
+  | zero => exact Nat.le_refl _
+  | succ fuel ih =>
     cases xs with
-    | nil => simp [merge]
-    | cons b rest =>
-      by_cases h : a = b
-      · have ih := merge_length rest
-        simp only [merge, if_pos h, List.length_cons] at *
-        omega
-      · have ih := merge_length (b :: rest)
-        simp only [merge, if_neg h, List.length_cons] at *
-        omega
-termination_by xs.length
+    | nil => simp [mergeFuel]
+    | cons a xs =>
+      cases xs with
+      | nil => simp [mergeFuel]
+      | cons b rest =>
+        by_cases h : a = b
+        · have ht := ih rest
+          simp only [mergeFuel, if_pos h, List.length_cons] at *
+          omega
+        · have ht := ih (b :: rest)
+          simp only [mergeFuel, if_neg h, List.length_cons] at *
+          omega
+
+theorem merge_length (xs : List Nat) : (merge xs).length ≤ xs.length :=
+  mergeFuel_length xs.length xs
 
 structure Row where
   a : Nat
