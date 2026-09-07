@@ -1,0 +1,8 @@
+**/*.olean
+**/*.ilean
+**/*.olean.*
+Game2048/Generated/
+*.log
+verification.json
+NegativeKernelTest.lean
+__pycache__/

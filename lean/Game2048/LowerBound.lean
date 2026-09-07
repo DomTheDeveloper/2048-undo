@@ -1,120 +1,134 @@
-import Game2048.Basic
+import Mathlib
 
-/-!
-A latency proof without tagged tiles or assumed merge trees.
-Heavy mass above twice a threshold after a round is bounded by heavy
-mass above the old threshold before the round. A spawn is at most 4,
-so it contributes nothing when the new threshold is at least 4.
-Iterating through k final rounds bounds a large target by the mass
-that was already present k rounds earlier.
--/
 namespace Game2048
 
-/-- 2, 4, 8, ... . After fifteen rounds this threshold is 65536. -/
-def cutoff : Nat → Nat
-  | 0 => 2
-  | n+1 => 2 * cutoff n
+/--
+Source ids encode the only tiles that can enter a standard game:
+0 and 1 are the two initial tiles; source k+2 is the tile spawned
+at the end of move k+1. Thus at most c+2 distinct sources exist
+by move c.
+-/
+def sourceTime (source : Nat) : Nat :=
+  if source < 2 then 0 else source - 1
 
-theorem cutoff_ge_two (n : Nat) : 2 ≤ cutoff n := by
-  induction n with
-  | zero => decide
-  | succ n ih => simp only [cutoff]; omega
+theorem source_lt_time_add_two (source : Nat) :
+    source < sourceTime source + 2 := by
+  unfold sourceTime
+  split <;> omega
 
-theorem cutoff_mono {n m : Nat} (h : n ≤ m) : cutoff n ≤ cutoff m := by
-  induction m generalizing n with
-  | zero =>
-    have hn : n = 0 := by omega
-    subst n
-    exact Nat.le_refl _
-  | succ m ih =>
-    by_cases hn : n ≤ m
-    · have hnm := ih hn
-      simp only [cutoff]
+/-- The ancestry of one tile. Internal nodes record the move on which the merge occurred. -/
+inductive MergeTree where
+  | leaf (source rank : Nat)
+  | merge (time : Nat) (left right : MergeTree)
+  deriving Repr
+
+namespace MergeTree
+
+def rank : MergeTree → Nat
+  | .leaf _ r => r
+  | .merge _ l _ => l.rank + 1
+
+def createdAt : MergeTree → Nat
+  | .leaf s _ => sourceTime s
+  | .merge t _ _ => t
+
+def sources : MergeTree → Finset Nat
+  | .leaf s _ => {s}
+  | .merge _ l r => l.sources ∪ r.sources
+
+/--
+A valid ancestry uses only spawned 2/4 leaves; merges equal-valued children;
+a child must exist strictly before the move that merges it; and the two
+children have disjoint source tiles. Geometry is deliberately omitted,
+so this is a relaxation of standard 2048: every actual tile history is valid
+here, while some histories admitted here may be geometrically impossible.
+-/
+inductive Valid : MergeTree → Prop where
+  | leaf (source r : Nat) (hrank : r = 1 ∨ r = 2) :
+      Valid (.leaf source r)
+  | merge (time : Nat) (left right : MergeTree)
+      (hl : Valid left) (hr : Valid right)
+      (heq : left.rank = right.rank)
+      (hlt : left.createdAt < time)
+      (hrt : right.createdAt < time)
+      (hdisj : Disjoint left.sources right.sources) :
+      Valid (.merge time left right)
+
+private theorem rank_pos {tr : MergeTree} (h : tr.Valid) : 0 < tr.rank := by
+  induction h with
+  | leaf source r hrank =>
+      rcases hrank with rfl | rfl <;> simp [rank]
+  | merge time l r hl hr heq hlt hrt hdisj ihl ihr =>
+      simp [rank]
+
+/-- A rank-r tile needs enough distinct source tiles: 2^r <= 4 * #sources. -/
+theorem value_le_four_mul_sources {tr : MergeTree} (h : tr.Valid) :
+    2 ^ tr.rank ≤ 4 * tr.sources.card := by
+  induction h with
+  | leaf source r hrank =>
+      rcases hrank with rfl | rfl <;> simp [rank, sources]
+  | merge time l r hl hr heq hlt hrt hdisj ihl ihr =>
+      have ihr' : 2 ^ l.rank ≤ 4 * r.sources.card := by
+        calc
+          2 ^ l.rank = 2 ^ r.rank := by rw [heq]
+          _ ≤ 4 * r.sources.card := ihr
+      have hcard : (l.sources ∪ r.sources).card = l.sources.card + r.sources.card :=
+        Finset.card_union_of_disjoint hdisj
+      simp only [rank, sources, Nat.pow_succ]
+      rw [hcard]
       omega
-    · have heq : n = m+1 := by omega
-      subst n
-      exact Nat.le_refl _
 
-theorem cutoff_eq_pow (n : Nat) : cutoff n = 2^(n+1) := by
-  induction n with
-  | zero => decide
-  | succ n ih =>
-    simp [cutoff, ih, Nat.pow_succ, Nat.mul_comm, Nat.add_assoc]
+/--
+Causality: every source leaf of a rank-r tile was born early enough to
+survive r-2 successive doublings. This is the formal "one doubling per
+move" part of the paper's minimum-move argument.
+-/
+theorem source_delay {tr : MergeTree} (h : tr.Valid) :
+    ∀ s ∈ tr.sources, sourceTime s + (tr.rank - 2) ≤ tr.createdAt := by
+  induction h with
+  | leaf source r hrank =>
+      intro s hs
+      have hs' : s = source := by simpa [sources] using hs
+      subst s
+      rcases hrank with rfl | rfl <;> simp [rank, createdAt]
+  | merge time l r hl hr heq hlt hrt hdisj ihl ihr =>
+      intro s hs
+      simp only [sources, Finset.mem_union] at hs
+      rcases hs with hs | hs
+      · have hd := ihl s hs
+        have hp := rank_pos hl
+        simp only [rank, createdAt]
+        omega
+      · have hd := ihr s hs
+        have hp := rank_pos hr
+        have heq' : r.rank = l.rank := heq.symm
+        simp only [rank, createdAt]
+        omega
 
-namespace Plays
-
-/-- No mass from new spawns can cross the exponentially increasing threshold. -/
-theorem latency_bound {a b : Board} {n : Nat} (p : Plays a n b) :
-    b.heavy (cutoff n) ≤ a.heavy 2 := by
-  induction p with
-  | refl => exact Nat.le_refl _
-  | @snoc n b c p s hs ih =>
-    have hh := step_heavy_le hs (cutoff n) (cutoff_ge_two n)
-    change c.heavy (2 * cutoff n) ≤ a.heavy 2
-    exact Nat.le_trans hh ih
-
-/-- The last k rounds cannot add mass to a tile above cutoff k. -/
-theorem tail_mass_bound {a b : Board} {n : Nat} (p : Plays a n b) :
-    ∀ k : Nat, k ≤ n → b.heavy (cutoff k) ≤ a.mass + 4*(n-k) := by
-  induction p with
-  | refl =>
-    intro k hk
-    have hk0 : k = 0 := by omega
-    subst k
-    simpa [cutoff] using Board.heavy_le_mass a 2
-  | @snoc n b c p s hs ih =>
-    intro k hk
-    cases k with
-    | zero =>
-      have h1 := Board.heavy_le_mass c 2
-      have h2 := Plays.mass_bound (Plays.snoc p s hs)
-      simpa [cutoff] using Nat.le_trans h1 h2
-    | succ k =>
-      have hk' : k ≤ n := by omega
-      have h1 := step_heavy_le hs (cutoff k) (cutoff_ge_two k)
-      have h2 := ih k hk'
-      change c.heavy (2 * cutoff k) ≤ a.mass + 4*((n+1)-(k+1))
-      omega
-
-/-- General target/deadline inequality, valid for every starting board.
-    In particular it does not assume a snake arrangement or a primed board. -/
-theorem target_deadline {a b : Board} {n : Nat} (p : Plays a n b)
-    (k target : Nat) (hcut : cutoff k < target) (hlarge : a.mass < target)
-    (hit : b.Contains target) : target + 4*k ≤ a.mass + 4*n := by
-  by_cases hk : k ≤ n
-  · have ht := tail_mass_bound p k hk
-    have hl := Board.contains_heavy_lower b (cutoff k) target hcut hit
-    omega
-  · have hnk : n ≤ k := by omega
-    have hc := cutoff_mono hnk
-    have hcn : cutoff n < target := by omega
-    have hl := Board.contains_heavy_lower b (cutoff n) target hcn hit
-    have ht := latency_bound p
-    have hm := Board.heavy_le_mass a 2
-    omega
-
-end Plays
-
-/-- Every legal play from any standard two-tile start needs at least
-    32,781 rounds to contain 131072. -/
-theorem lower_bound_131072 {a b : Board} {n : Nat}
-    (hi : IsInitial a) (p : Plays a n b) (hit : b.Contains 131072) :
-    32781 ≤ n := by
-  have hm := initial_mass_le hi
-  have hlarge : a.mass < 131072 := by omega
-  have h := Plays.target_deadline p 15 131072 (by decide) hlarge hit
+/-- Every source of a rank-17 tile created at move T lies among the first T-15 moves plus the starts. -/
+theorem rank17_sources_subset {tr : MergeTree} (h : tr.Valid)
+    (hrank : tr.rank = 17) :
+    tr.sources ⊆ Finset.range (tr.createdAt - 15 + 2) := by
+  intro s hs
+  have hd := source_delay h s hs
+  rw [hrank] at hd
+  have htime : sourceTime s ≤ tr.createdAt - 15 := by omega
+  apply Finset.mem_range.mpr
+  have hsrc := source_lt_time_add_two s
   omega
 
-/-- The same proof gives the familiar 519-move lower bound for 2048. -/
-theorem lower_bound_2048 {a b : Board} {n : Nat}
-    (hi : IsInitial a) (p : Plays a n b) (hit : b.Contains 2048) :
-    519 ≤ n := by
-  have hm := initial_mass_le hi
-  have hlarge : a.mass < 2048 := by omega
-  have h := Plays.target_deadline p 9 2048 (by decide) hlarge hit
+/-- A valid rank-17 ancestry cannot finish before move 32,781. -/
+theorem rank17_minimum_moves {tr : MergeTree} (h : tr.Valid)
+    (hrank : tr.rank = 17) :
+    32781 ≤ tr.createdAt := by
+  have hvalue := value_le_four_mul_sources h
+  rw [hrank] at hvalue
+  norm_num at hvalue
+  have hsub := rank17_sources_subset h hrank
+  have hcard := Finset.card_le_card hsub
+  simp only [Finset.card_range] at hcard
   omega
 
-#print axioms lower_bound_131072
-#print axioms lower_bound_2048
+end MergeTree
 
 end Game2048

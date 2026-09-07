@@ -7,14 +7,3 @@ paper/*.bbl
 paper/*.blg
 paper/*.out
 paper/*.toc
-
-# Lean: rebuilt from the checked-in source and plaintext witness
-lean/**/*.olean
-lean/**/*.ilean
-lean/**/*.olean.*
-lean/Game2048/Generated/
-lean/*.log
-lean/verification.json
-lean/Smoke.lean
-lean/NegativeKernelTest.lean
-lean/__pycache__/

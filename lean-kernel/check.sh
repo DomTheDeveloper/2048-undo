@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
-cd "$(dirname "$0")/lean"
+cd "$(dirname "$0")"
 export LEAN_PATH="$PWD"
+rm -f verification.json Game2048/Main.olean
 lean --version | tee toolchain.log
 if ! grep -q 'version 4.19.0,' toolchain.log; then
-  echo 'Expected the pinned Lean 4.19.0 toolchain; see ../lean-toolchain.' >&2
+  echo 'Expected the pinned Lean 4.19.0 toolchain.' >&2
   exit 1
 fi
 lean -o Game2048/Basic.olean Game2048/Basic.lean 2>&1 | tee basic.log
