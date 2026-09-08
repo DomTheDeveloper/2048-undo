@@ -1,0 +1,124 @@
+name: Reconcile and build the complete author-identified submission
+on:
+  push:
+    branches: [release/manuscript-20260907]
+    paths: [.github/workflows/submission-reconcile.yml]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: submission-reconcile-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  assemble:
+    if: github.ref == 'refs/heads/release/manuscript-20260907'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - name: Preserve the concurrent research rather than overwriting it
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Dominic Dabish'
+          git config user.email 'ddabish@sdsu.edu'
+          other=31cb657b9fc3d8fb5a653fcfe847c02fe682e31a
+          git fetch origin "$other"
+          git merge --no-commit --no-ff "$other" || test -f .git/MERGE_HEAD
+          python3 - <<'PY'
+          import subprocess
+          from pathlib import Path
+          conflicts = subprocess.check_output(['git','diff','--name-only','--diff-filter=U'],text=True).splitlines()
+          allowed={'CITATION.cff','.github/workflows/manuscript-release.yml','paper/main.pdf'}
+          assert set(conflicts) <= allowed, conflicts
+          for name in conflicts:
+              subprocess.run(['git','checkout','--theirs','--',name],check=True)
+          p=Path('paper/main.tex');s=p.read_text()
+          a=s.index('\\author{Dominic Dabish');b=s.index('\\begin{document}',a)
+          s=s[:a]+'\\input{author}\n\\date{Research preprint, September 7, 2026}\n\n'+s[b:]
+          old=('Table~\\ref{tab:exact} summarises. On every board tested the score ceiling\n'
+               'is attained, always on the full chain, always with exactly one spawned 4\n'
+               'per tile, and the longest game is exactly $2^{c+1}-4-c$ moves and ends on')
+          new=('Table~\\ref{tab:exact} summarises. Each enumerated board admits a\n'
+               'ceiling-score full-chain witness with exactly one spawned 4 per tile.\n'
+               'Replacing its last spawned 4 by a 2 gives the other equality case without\n'
+               'changing the score. The longest game is exactly $2^{c+1}-4-c$ moves and ends on')
+          assert old in s
+          p.write_text(s.replace(old,new))
+          p=Path('paper/refs.bib');p.write_text(p.read_text().replace('author = {Dominic Dabish}','author = {Dabish, Dominic}'))
+          subprocess.run(['git','apply','--include=lean-kernel/README.md','paper/final-editorial.patch'],check=True)
+          p=Path('README.md');s=p.read_text().replace('The [paper](paper/main.pdf) integrates them in Section 6.5, including the','The [paper](paper/main.pdf) integrates them in the section\n“Kernel-checked reachability and optimality in Lean,” including the');p.write_text(s)
+          p=Path('submission/build.py');s=p.read_text()
+          old="INPUTS = ['main.tex', 'figs.tex', 'lean.tex', 'deductions.tex', 'state-space.tex', 'refs.bib']"
+          new='''def manuscript_inputs():
+              pending, found = ['main.tex'], set()
+              while pending:
+                  name = pending.pop()
+                  if name in found:
+                      continue
+                  path = PAPER / name
+                  if not path.is_file() or path.parent != PAPER:
+                      raise RuntimeError(f'Unsupported or missing TeX input: {name}')
+                  found.add(name)
+                  for item in re.findall(r'\\\\(?:input|include)\\{([^}]+)\\}', path.read_text()):
+                      pending.append(item if item.endswith('.tex') else item + '.tex')
+              return sorted(found | {'refs.bib'})
+          INPUTS = manuscript_inputs()'''
+          assert old in s;s=s.replace(old,new);p.write_text(s)
+          for name in ['README.md','paper/main.tex','CITATION.cff']:
+              assert not any(x.startswith(('<<<<<<<','=======','>>>>>>>')) for x in Path(name).read_text().splitlines()),name
+          PY
+          git add CITATION.cff .github/workflows/manuscript-release.yml paper/main.pdf paper/main.tex paper/refs.bib README.md lean-kernel/README.md submission/build.py
+          git diff --exit-code "$other" -- paper/monotone.tex paper/state-space-body.tex research/monotone
+      - name: Confirm the formal inputs still match the completed full rebuild
+        run: |
+          python3 - <<'PY'
+          import json,hashlib
+          from pathlib import Path
+          r=json.loads(Path('submission/verification/release-check.json').read_text())
+          for name,digest in r['proof_input_sha256'].items():
+              assert hashlib.sha256(Path(name).read_bytes()).hexdigest()==digest,name
+          Path('submission/verification/consolidation.json').write_text(json.dumps({
+            'preserved_revision':'31cb657b9fc3d8fb5a653fcfe847c02fe682e31a',
+            'formal_inputs_unchanged':True,'kernel_audit':'release-check.json',
+            'scope':'The completed fresh local kernel rebuild remains applicable to unchanged formal inputs. Concurrent monotone arguments are preserved as conventional mathematics, not newly Lean-verified.'},indent=2)+'\n')
+          PY
+      - name: Build the manuscript and verify its self-contained source archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends latexmk texlive-latex-extra texlive-pictures texlive-fonts-recommended poppler-utils
+          python3 submission/build.py
+          python3 paper/finalize.py check
+          mkdir -p /tmp/2048-submission
+          tar -xzf submission/arxiv-source.tar.gz -C /tmp/2048-submission
+          (cd /tmp/2048-submission && SOURCE_DATE_EPOCH=1788782400 FORCE_SOURCE_DATE=1 latexmk -g -pdf -interaction=nonstopmode -halt-on-error main.tex)
+          pdftotext -layout paper/main.pdf /tmp/full-manuscript.txt
+          pdftotext -layout /tmp/2048-submission/main.pdf /tmp/submission-manuscript.txt
+          cmp /tmp/full-manuscript.txt /tmp/submission-manuscript.txt
+      - name: Commit complete sources, evidence and PDF on the release branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add README.md CITATION.cff paper/main.tex paper/refs.bib paper/main.pdf lean-kernel/README.md submission/
+          git commit -m 'Reconcile Dominic Dabish submission package with concurrent monotone research and rebuild all manuscript inputs'
+          git push origin HEAD:release/manuscript-20260907
+          mkdir -p publication
+          git rev-parse HEAD > publication/source-commit.txt
+          git archive --format=zip --output=publication/Perfect-2048-Release.zip HEAD paper lean-kernel research witness verify test js submission README.md CITATION.cff CITATION.bib LICENSE.txt STATE_SPACE.md
+          cp paper/main.pdf publication/Perfect-2048-Dominic-Dabish.pdf
+          cp submission/arxiv-source.tar.gz publication/Perfect-2048-Arxiv-Source.tar.gz
+          cp submission/BUILD.json publication/
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: consolidated-author-identified-2048-release
+          path: |
+            publication/
+            paper/main.log
+            submission/_build/*.log
+            submission/verification/
+          if-no-files-found: error

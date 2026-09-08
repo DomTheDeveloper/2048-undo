@@ -1,6 +1,19 @@
 # 2048 Superintelligence
 A small clone of [1024](https://play.google.com/store/apps/details?id=com.veewo.a1024), based on [Saming's 2048](http://saming.fr/p/2048/) (also a clone), with Alok Menghrajani's undo mod — and an AI panel on top. [Play it here!](https://domthedeveloper.github.io/2048-undo/)
 
+### Research paper and author
+
+**Perfect 2048: Kernel-Verified Optima and Extremal Play**  
+**Dominic Dabish** · San Diego State University · ddabish@sdsu.edu
+
+[Read the paper](paper/main.pdf) · [LaTeX submission source](submission/arxiv-source.tar.gz) ·
+[Submission and verification record](submission/README.md) · [Citation metadata](CITATION.cff)
+
+This is a public preprint and reproducible research artifact; it has not been
+submitted to or accepted by a journal through this repository update. The
+formal proofs cover the named fixed-board results, not all arguments in the
+paper. The broader conjectures remain explicitly identified as unresolved.
+
 ### Further extremal results (research revision)
 
 The new [research note](research/DEDUCTIONS.md) and expanded paper prove the
@@ -35,7 +48,8 @@ exact minimum is 32,782.** These are existential optima over legal spawn
 sequences, not guaranteed wins against random spawns.
 
 The complete fixed-4×4 proofs are in [`lean-kernel/`](lean-kernel/README.md).
-The [paper](paper/main.pdf) integrates them in Section 6.5, including the
+The [paper](paper/main.pdf) integrates them in the section
+“Kernel-checked reachability and optimality in Lean,” including the
 formal rules, the direct threshold-mass lower bound, and the axiom audit.
 
 ```sh
