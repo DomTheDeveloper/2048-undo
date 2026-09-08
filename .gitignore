@@ -7,3 +7,10 @@ paper/*.bbl
 paper/*.blg
 paper/*.out
 paper/*.toc
+paper/*.fls
+paper/*.fdb_latexmk
+
+# Reproducible interpreter/build caches
+__pycache__/
+*.py[cod]
+submission/_build/

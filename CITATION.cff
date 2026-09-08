@@ -1,0 +1,26 @@
+cff-version: 1.2.0
+message: "Please cite the manuscript when using these proofs, witnesses, or research results."
+type: software
+title: "Perfect 2048: Kernel-Verified Optima and Extremal Play — Research Artifact"
+version: "2026.09.07"
+date-released: 2026-09-07
+authors:
+  - family-names: Dabish
+    given-names: Dominic
+    affiliation: San Diego State University
+    email: ddabish@sdsu.edu
+repository-code: "https://github.com/DomTheDeveloper/2048-undo"
+url: "https://domthedeveloper.github.io/2048-undo/"
+preferred-citation:
+  type: article
+  title: "Perfect 2048: Kernel-Verified Optima and Extremal Play"
+  authors:
+    - family-names: Dabish
+      given-names: Dominic
+      affiliation: San Diego State University
+      email: ddabish@sdsu.edu
+  year: 2026
+  month: 9
+  date-published: 2026-09-07
+  url: "https://domthedeveloper.github.io/2048-undo/paper/main.pdf"
+  notes: "Preprint. No journal acceptance or arXiv identifier is asserted."

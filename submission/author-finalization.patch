@@ -1,0 +1,110 @@
+--- a/paper/main.tex
++++ b/paper/main.tex
+@@ -39,8 +39,18 @@
+ \input{figs}
+ 
+ \title{Perfect 2048:\\ Kernel-Verified Optima and Extremal Play}
+-\author{Dom the Developer\\ \small \url{https://github.com/DomTheDeveloper/2048-undo}}
+-\date{Draft, September 2026}
++\author{Dominic Dabish\\
++  \small San Diego State University\\
++  \small \href{mailto:ddabish@sdsu.edu}{\texttt{ddabish@sdsu.edu}}}
++\date{Preprint, September 7, 2026}
++\hypersetup{
++  pdftitle={Perfect 2048: Kernel-Verified Optima and Extremal Play},
++  pdfauthor={Dominic Dabish},
++  pdfsubject={Extremal possible play in 2048 and Lean-verified time--mass optima},
++  pdfkeywords={2048, Lean, formal verification, reachability, extremal games},
++  pdfdisplaydoctitle=true,
++  pdflang={en-US}
++}
+ 
+ \begin{document}
+ \maketitle
+@@ -388,7 +398,8 @@
+ \cite{leesmiller2017} exhibits the $519=510+9$ move win on $4\times4$. For
+ $n=17$ we generated, verified and ship a $32{,}781$-move line
+ (Section~\ref{sec:algorithm}); Table~\ref{tab:exact} shows that the bound
+-is attained for every tile on every board up to ten cells---the 2048
++is attained for each relevant tile on each enumerated board up to ten
++cells---the 2048
+ tile, for instance, needs exactly $519$ moves on the ten-cell $2\times5$
+ board too, where it is the largest tile there is. For the
+ largest tile a board can hold, the fastest plays are far more constrained
+@@ -1334,6 +1345,9 @@
+ 
+ \input{deductions}
+ 
++\fussy
++\input{state-space}
++
+ \section{Open problems}\label{sec:open}
+ 
+ \begin{enumerate}[nosep]
+@@ -1370,6 +1384,15 @@
+ 
+ \section*{Reproducibility}
+ 
++\paragraph{Manuscript and artifact availability.}
++The manuscript, plaintext witnesses, source code, and verification records
++are available in the public repository
++\url{https://github.com/DomTheDeveloper/2048-undo}, on its
++\texttt{gh-pages} branch. The submission source bundle and its build
++manifest are retained under \texttt{submission/}. All results are
++reported with their verification scope; posting this preprint does not
++constitute journal acceptance or external peer review.
++
+ \paragraph{Research expansion.}
+ Run \texttt{bash research/finish.sh} to rebuild the original certificate,
+ the every-opening and minimum-mass theorems, the deadline-slack lemmas,
+@@ -1422,9 +1445,6 @@
+ priority. The proof and experiment sources are provided for independent
+ checking.
+ 
+-\fussy
+-\input{state-space}
+-
+ \bibliographystyle{plain}
+ \bibliography{refs}
+ 
+--- a/paper/refs.bib
++++ b/paper/refs.bib
+@@ -198,7 +198,7 @@
+   howpublished = {\url{https://github.com/nneonneo/2048-ai}}
+ }
+ @misc{superintelligence2026,
+-  author = {Dom the Developer},
++  author = {Dominic Dabish},
+   title  = {2048 {S}uperintelligence},
+   year   = {2026},
+   howpublished = {\url{https://github.com/DomTheDeveloper/2048-undo}}
+@@ -264,7 +264,7 @@
+   note = {Accessed 7 September 2026}
+ }
+ @misc{lean2048artifact2026,
+-  author = {Dom the Developer},
++  author = {Dominic Dabish},
+   title = {{Lean}-checked reachability and exact minimum move counts for 131072 in 2048},
+   year = {2026},
+   howpublished = {Source artifact, \url{https://github.com/DomTheDeveloper/2048-undo/tree/03ca3d181640a2c2a7685efc3ead4ff932d925e4/lean-kernel}},
+--- a/README.md
++++ b/README.md
+@@ -1,5 +1,18 @@
+ # 2048 Superintelligence
+ A small clone of [1024](https://play.google.com/store/apps/details?id=com.veewo.a1024), based on [Saming's 2048](http://saming.fr/p/2048/) (also a clone), with Alok Menghrajani's undo mod — and an AI panel on top. [Play it here!](https://domthedeveloper.github.io/2048-undo/)
++
++### Research paper and author
++
++**Perfect 2048: Kernel-Verified Optima and Extremal Play**  
++**Dominic Dabish** · San Diego State University · ddabish@sdsu.edu
++
++[Read the paper](paper/main.pdf) · [LaTeX submission source](submission/arxiv-source.tar.gz) ·
++[Submission and verification record](submission/README.md) · [Citation metadata](CITATION.cff)
++
++This is a public preprint and reproducible research artifact; it has not been
++submitted to or accepted by a journal through this repository update. The
++formal proofs cover the named fixed-board results, not all arguments in the
++paper. The broader conjectures remain explicitly identified as unresolved.
+ 
+ ### Further extremal results (research revision)
+ 
