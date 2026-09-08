@@ -1,11 +1,18 @@
 name: Monotone theorem and paper integration
 on:
   push:
-    branches: [research/monotone-official-integration]
+    branches:
+      - research/monotone-official-integration
+      - claude/super-mode-speed-corners-doxfcj
+    paths:
+      - 'paper/*.tex'
+      - 'paper/*.bib'
+      - 'research/monotone/**'
+      - '.github/workflows/monotone-integration.yml'
   pull_request:
     branches: [claude/super-mode-speed-corners-doxfcj]
 permissions:
-  contents: read
+  contents: write
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -41,3 +48,14 @@ jobs:
           grep -q 'Exact monotone extrema' /tmp/paper.txt
           grep -q 'Spawn-robust rectangular fold' /tmp/paper.txt
           grep -q 'Every-opening joint optimum' /tmp/paper.txt
+      - name: Publish rebuilt tracked PDF
+        if: github.event_name == 'push' && github.ref == 'refs/heads/claude/super-mode-speed-corners-doxfcj'
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add paper/main.pdf
+          if ! git diff --cached --quiet; then
+            git commit -m 'Rebuild paper PDF with monotone extremal results'
+            git push origin HEAD:claude/super-mode-speed-corners-doxfcj
+          fi
