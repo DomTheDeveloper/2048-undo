@@ -1,2 +1,3 @@
 ## Contributing
-Changes and improvements are more than welcome! Feel free to fork and open a pull request. Please make your changes in a specifically made branch and request to pull on `master`! If you can, please make sure the game fully works before sending the PR, as that will help speed up the process.
+
+Changes and improvements are welcome. Fork the repository, make your changes in a feature branch in your fork, and open a pull request targeting `gh-pages`. This repository uses `gh-pages` as its canonical development and publication branch. Please run the relevant game, witness, research and proof checks before submitting changes.

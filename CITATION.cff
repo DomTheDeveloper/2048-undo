@@ -9,8 +9,8 @@ authors:
     given-names: "Dominic"
     affiliation: "San Diego State University"
     email: "ddabish@sdsu.edu"
-repository-code: "https://github.com/DomTheDeveloper/2048-undo"
-url: "https://github.com/DomTheDeveloper/2048-undo"
+repository-code: "https://github.com/DomTheDeveloper/2048"
+url: "https://github.com/DomTheDeveloper/2048"
 preferred-citation:
   type: unpublished
   title: "Perfect 2048: Kernel-Verified Optima and Extremal Play"
@@ -22,4 +22,4 @@ preferred-citation:
   year: 2026
   month: 9
   notes: "Research preprint; no journal acceptance or peer-review status is asserted."
-  url: "https://github.com/DomTheDeveloper/2048-undo/blob/claude/super-mode-speed-corners-doxfcj/paper/main.pdf"
+  url: "https://github.com/DomTheDeveloper/2048/blob/gh-pages/paper/main.pdf"

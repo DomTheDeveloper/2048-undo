@@ -1,5 +1,5 @@
 # 2048 Superintelligence
-A small clone of [1024](https://play.google.com/store/apps/details?id=com.veewo.a1024), based on [Saming's 2048](http://saming.fr/p/2048/) (also a clone), with Alok Menghrajani's undo mod — and an AI panel on top. [Play it here!](https://domthedeveloper.github.io/2048-undo/)
+A small clone of [1024](https://play.google.com/store/apps/details?id=com.veewo.a1024), based on [Saming's 2048](http://saming.fr/p/2048/) (also a clone), with Alok Menghrajani's undo mod — and an AI panel on top. [Play it here!](https://domthedeveloper.github.io/2048/)
 
 ### Research paper and author
 
@@ -497,7 +497,7 @@ Many thanks to [rayhaanj](https://github.com/rayhaanj), [Mechazawa](https://gith
 That screenshot is fake, by the way. I never reached 2048 :smile:
 
 ## Contributing
-Changes and improvements are more than welcome! Feel free to fork and open a pull request. Please make your changes in a specific branch and request to pull into `master`! If you can, please make sure the game fully works before sending the PR, as that will help speed up the process.
+Changes and improvements are more than welcome! Feel free to fork and open a pull request. Please make your changes in a specific branch and request to pull into `gh-pages`! If you can, please make sure the game fully works before sending the PR, as that will help speed up the process.
 
 You can find the same information in the [contributing guide.](https://github.com/gabrielecirulli/2048/blob/master/CONTRIBUTING.md)
 
