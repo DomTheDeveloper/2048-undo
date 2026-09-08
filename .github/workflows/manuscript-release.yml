@@ -1,8 +1,8 @@
-name: Build author-identified manuscript release
+name: Finalize Dominic Dabish 2048 manuscript
 on:
   push:
-    branches: [release/manuscript-20260907]
-    paths: [.github/workflows/manuscript-release.yml]
+    branches: ['claude/super-mode-speed-corners-doxfcj']
+    paths: ['paper/**', 'CITATION.*', '.github/workflows/manuscript-release.yml']
   workflow_dispatch:
 permissions:
   contents: write
@@ -10,83 +10,79 @@ concurrency:
   group: manuscript-release-${{ github.ref }}
   cancel-in-progress: false
 jobs:
-  release:
-    if: github.ref == 'refs/heads/release/manuscript-20260907'
+  finalize:
+    if: github.ref == 'refs/heads/claude/super-mode-speed-corners-doxfcj' && github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
-      - name: Apply reviewed author and editorial changes only to their exact baseline
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Apply reviewed editorial changes without overwriting newer work
         shell: bash
         run: |
           set -euo pipefail
-          if [ -f submission/author-finalization.patch ]; then
-            python3 - <<'PY'
-          import hashlib
-          from pathlib import Path
-          expected = {
-            'paper/main.tex': 'c0ab7f8b7786117cb065102a6dbbd5ae6efce94a0b03d1dbe43e08a429fb6d1d',
-            'paper/refs.bib': '46570f4672640b2c82b2112788927175898b7115bde83b37cb83b0d6a379cb00',
-            'README.md': '979431c1a0083f240fd83b8144afd1b798ef5dd5bbe8015e27684d58f1590d3a',
-          }
-          for name, digest in expected.items():
-              assert hashlib.sha256(Path(name).read_bytes()).hexdigest() == digest, name
-          PY
-            git apply --check submission/author-finalization.patch
-            git apply submission/author-finalization.patch
-            git rm submission/author-finalization.patch
-          fi
-      - name: Match release proof and paper inputs to the completed local verification
-        run: |
+          python3 paper/finalize.py apply
           python3 - <<'PY'
-          import hashlib, json
           from pathlib import Path
-          report = json.loads(Path('submission/verification/release-check.json').read_text())
-          assert report['checks']['fresh_full_lean_rebuild'] is True
-          assert report['checks']['independent_state_space_quick_suite'] is True
-          for category in ['proof_input_sha256', 'reviewed_manuscript_sha256']:
-              for name, digest in report[category].items():
-                  assert hashlib.sha256(Path(name).read_bytes()).hexdigest() == digest, name
-          print('Exact inputs match the completed fresh local kernel and manuscript checks.')
-          print('This publication job checks identity; it is not a second kernel rebuild.')
+          p=Path('README.md')
+          p.write_text(p.read_text().replace('**Dominic Dabish — San Diego State University**  \n', '**Dominic Dabish — San Diego State University**\n'))
           PY
-      - name: Install LaTeX and build the paper and submission archive
+      - name: Install isolated pinned Lean 4.19.0
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/lean419"
+          curl --fail --location --retry 3 https://github.com/leanprover/lean4/releases/download/v4.19.0/lean-4.19.0-linux.tar.zst --output "$RUNNER_TEMP/lean419.tar.zst"
+          tar --use-compress-program=unzstd -xf "$RUNNER_TEMP/lean419.tar.zst" -C "$RUNNER_TEMP/lean419" --strip-components=1
+          "$RUNNER_TEMP/lean419/bin/lean" --version
+          echo "$RUNNER_TEMP/lean419/bin" >> "$GITHUB_PATH"
+      - name: Rebuild every claimed Lean theorem and replay all finite constructions
+        shell: bash
+        run: |
+          set -euo pipefail
+          find lean-kernel -name '*.olean' -delete
+          mkdir -p research/audit/release
+          sha256sum "$RUNNER_TEMP/lean419.tar.zst" > research/audit/release/toolchain-download.sha256
+          bash research/finish.sh full 2>&1 | tee research/audit/release/full-kernel.log
+          git diff --exit-code -- js witness lean-kernel/Game2048
+      - name: Fresh full state-space verification
+        run: bash research/state-space/run.sh --large --output-dir "$RUNNER_TEMP/state-space-final"
+      - name: Install typesetting tools and rebuild final PDF
         shell: bash
         run: |
           set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends latexmk texlive-latex-extra texlive-pictures texlive-fonts-recommended poppler-utils
-          python3 submission/build.py
-          mkdir -p /tmp/standalone-2048
-          tar -xzf submission/arxiv-source.tar.gz -C /tmp/standalone-2048
-          (cd /tmp/standalone-2048 && SOURCE_DATE_EPOCH=1788782400 FORCE_SOURCE_DATE=1 latexmk -g -pdf -interaction=nonstopmode -halt-on-error main.tex)
-          pdftotext -layout paper/main.pdf /tmp/repository-paper.txt
-          pdftotext -layout /tmp/standalone-2048/main.pdf /tmp/standalone-paper.txt
-          cmp /tmp/repository-paper.txt /tmp/standalone-paper.txt
-      - name: Commit the finalized byline, PDF, citation, and submission outputs
+          export SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)
+          export FORCE_SOURCE_DATE=1
+          bash paper/build.sh 2>&1 | tee research/audit/release/paper-build.log
+      - name: Bind the release receipt to the completed checks
+        shell: bash
+        env:
+          STATE_SPACE_RUN: ${{ runner.temp }}/state-space-final
+        run: python3 paper/finalize.py record
+      - name: Commit verified author metadata, manuscript, PDF and evidence
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'Dominic Dabish'
           git config user.email 'ddabish@sdsu.edu'
-          git add paper/main.tex paper/refs.bib paper/main.pdf README.md CITATION.cff submission/
-          if ! git diff --cached --quiet; then
-            git commit -m 'Publish Dominic Dabish SDSU preprint and verified standalone submission source'
-            git push origin HEAD:release/manuscript-20260907
-          fi
-          mkdir -p publication
-          git rev-parse HEAD > publication/source-commit.txt
-          git archive --format=zip --output=publication/Perfect-2048-Release.zip HEAD paper lean-kernel research witness verify test js submission README.md CITATION.cff LICENSE.txt STATE_SPACE.md
-          cp paper/main.pdf publication/Perfect-2048-Dominic-Dabish.pdf
-          cp submission/arxiv-source.tar.gz publication/Perfect-2048-Arxiv-Source.tar.gz
-          cp submission/BUILD.json publication/
-      - uses: actions/upload-artifact@v4
+          git add README.md lean-kernel/README.md paper/main.tex paper/refs.bib paper/main.pdf paper/release.json research/audit/
+          git diff --cached --check
+          git commit -m 'Finalize Dominic Dabish SDSU manuscript with fresh all-opening kernel audit and rebuilt PDF'
+          git push origin HEAD:claude/super-mode-speed-corners-doxfcj
+          git rev-parse HEAD > publication/publication-commit.txt
+          git archive --format=zip --output=publication/Perfect-2048-Source-and-Evidence.zip HEAD paper lean-kernel research witness verify test js README.md STATE_SPACE.md CITATION.cff CITATION.bib LICENSE.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
-          name: author-identified-2048-release
+          name: Dominic-Dabish-2048-final-${{ github.run_id }}
           path: |
             publication/
-            submission/_build/*.log
-            submission/_build/pdfinfo.txt
-            submission/verification/
+            paper/main.log
+            research/audit/
+            lean-kernel/*.log
+            lean-kernel/verification.json
+            lean-kernel/Game2048/Generated/*.lean
+            ${{ runner.temp }}/state-space-final/
           if-no-files-found: error
+          retention-days: 90

@@ -48,7 +48,8 @@ exact minimum is 32,782.** These are existential optima over legal spawn
 sequences, not guaranteed wins against random spawns.
 
 The complete fixed-4×4 proofs are in [`lean-kernel/`](lean-kernel/README.md).
-The [paper](paper/main.pdf) integrates them in Section 6.5, including the
+The [paper](paper/main.pdf) integrates them in the section
+“Kernel-checked reachability and optimality in Lean,” including the
 formal rules, the direct threshold-mass lower bound, and the axiom audit.
 
 ```sh

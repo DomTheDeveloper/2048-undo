@@ -15,7 +15,20 @@ ROOT = Path(__file__).resolve().parents[1]
 PAPER = ROOT / 'paper'
 OUT = ROOT / 'submission'
 EPOCH = 1788782400  # Fixed 2026-09-07 12:00 UTC; not an audit timestamp.
-INPUTS = ['main.tex', 'figs.tex', 'lean.tex', 'deductions.tex', 'state-space.tex', 'refs.bib']
+def manuscript_inputs():
+    pending, found = ['main.tex'], set()
+    while pending:
+        name = pending.pop()
+        if name in found:
+            continue
+        path = PAPER / name
+        if not path.is_file() or path.parent != PAPER:
+            raise RuntimeError(f'Unsupported or missing TeX input: {name}')
+        found.add(name)
+        for item in re.findall(r'\\(?:input|include)\{([^}]+)\}', path.read_text()):
+            pending.append(item if item.endswith('.tex') else item + '.tex')
+    return sorted(found | {'refs.bib'})
+INPUTS = manuscript_inputs()
 TITLE = 'Perfect 2048: Kernel-Verified Optima and Extremal Play'
 
 
