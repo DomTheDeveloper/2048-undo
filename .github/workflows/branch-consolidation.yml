@@ -3,69 +3,44 @@ on:
   push:
     branches: [gh-pages]
     paths: [.github/workflows/branch-consolidation.yml]
-  workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
+  actions: write
 concurrency:
   group: 2048-branch-consolidation
   cancel-in-progress: false
 jobs:
-  audit:
+  consolidate:
     if: github.ref == 'refs/heads/gh-pages'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0
-          persist-credentials: false
-      - name: Compare reviewed branch changes with the canonical tree
+      - name: Fresh computational verification of the consolidated source
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          import subprocess, pathlib
-          def git(*args):
-              return subprocess.check_output(['git', *args], text=True).strip()
-          target = git('rev-parse', 'HEAD')
-          blobs = {}
-          for line in git('ls-tree', '-r', target).splitlines():
-              meta, path = line.split('\t', 1)
-              blobs.setdefault(meta.split()[2], []).append(path)
-          refs = {
-              'agent/sun214-lean-audit': '5ca18f995a1d3a34d29bfb6776011e0e9ae00de8',
-              'proof/lean-131072-verified': 'd6aeeb9b6a0dcc834192e8cde2e1d77a0cd7b008',
-              'research/extremal-2048': '08eb0ddd1f3cb45409cffc12006177e8de0d193a',
-          }
-          print('TARGET', target, flush=True)
-          for branch, sha in refs.items():
-              print('\n=== BRANCH', branch, sha, '===', flush=True)
-              base = git('merge-base', target, sha)
-              print(git('log', '--oneline', base+'..'+sha))
-              for path in git('diff', '--name-only', base, sha).splitlines():
-                  source = git('ls-tree', sha, '--', path)
-                  if not source:
-                      print('SOURCE DELETED:', path)
-                      continue
-                  blob = source.split()[2]
-                  if blob in blobs:
-                      print('EXACT CONTENT PRESERVED:', path, '=>', ', '.join(blobs[blob]))
-                  else:
-                      exists = bool(git('ls-tree', target, '--', path))
-                      print('DIFFERENT' if exists else 'ABSENT', path)
-                      if path.endswith(('.lean', '.sh', '.yml', '.md', '.tex', '.bib', '.py')):
-                          print(git('diff', '--stat', sha, target, '--', path))
-          print('\n=== WORKFLOW BRANCH TARGETS ===')
-          for path in sorted(pathlib.Path('.github/workflows').glob('*.yml')):
-              print('\n', path)
-              for line in path.read_text().splitlines():
-                  if any(t in line for t in ['branches:', 'github.ref', 'git push', 'workflow_call', 'paths:', 'name:']):
-                      print(line)
-          PY
-      - name: Package current source for independent inspection
-        run: git archive --format=zip --output=2048-consolidation-source.zip HEAD
+          mkdir -p "$RUNNER_TEMP/consolidation"
+          git diff --exit-code d2d954fd77218248246db4ea8b30cd2f6333c75b -- js witness lean-kernel lean paper research/monotone research/state-space
+          for file in js/*.js; do node --check "$file"; done
+          node test/paper_facts.js > "$RUNNER_TEMP/consolidation/paper-facts.log"
+          for name in 131072 full-chain max-score; do
+            python3 verify/verify2048.py "witness/$name.txt" > "$RUNNER_TEMP/consolidation/$name-python.log"
+            node test/replay_engine.js "witness/$name.txt" > "$RUNNER_TEMP/consolidation/$name-engine.log"
+          done
+          bash research/finish.sh --computations-only > "$RUNNER_TEMP/consolidation/research.log" 2>&1
+          bash research/state-space/run.sh --large --output-dir "$RUNNER_TEMP/consolidation/state-space" > "$RUNNER_TEMP/consolidation/state-space.log" 2>&1
+          git restore --worktree .
+      - name: Preserve canonical links and delete only reviewed integrated branch tips
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 maintenance/consolidate_branches.py
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
         with:
-          name: 2048-consolidation-source
-          path: 2048-consolidation-source.zip
-          retention-days: 7
+          name: branch-consolidation-${{ github.run_id }}
+          path: ${{ runner.temp }}/consolidation/
+          if-no-files-found: error
+          retention-days: 30
