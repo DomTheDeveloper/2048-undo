@@ -1,0 +1,84 @@
+name: Publish verified Dominic Dabish manuscript
+on:
+  push:
+    branches: ['claude/super-mode-speed-corners-doxfcj']
+    paths: ['.github/workflows/verified-manuscript-publication.yml', 'release/publish_verified.py']
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: verified-manuscript-publication-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/claude/super-mode-speed-corners-doxfcj' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Restore the completed fresh audit only for identical proof inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --silent --show-error -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" https://api.github.com/repos/DomTheDeveloper/2048-undo/actions/artifacts/10036891180/zip --output "$RUNNER_TEMP/verified-audit.zip"
+          python3 release/publish_verified.py restore "$RUNNER_TEMP/verified-audit.zip"
+          git diff --exit-code -- js witness lean-kernel/Game2048
+      - name: Fresh state-space and concurrent monotone checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash research/state-space/run.sh --large --output-dir "$RUNNER_TEMP/state-space-published"
+          {
+            python3 -m py_compile research/monotone/*.py
+            python3 research/monotone/construct.py 4x4 --mode rich --out /tmp/monotone-4x4.txt
+            python3 research/monotone/verify_2d.py /tmp/monotone-4x4.txt
+            python3 research/monotone/construct.py 2x2x2 --mode rich --out /tmp/monotone-cube.txt
+            python3 research/monotone/verify_box.py /tmp/monotone-cube.txt
+            python3 research/monotone/exhaustive.py
+            python3 research/monotone/test_rectangle_fold.py
+            node test/paper_facts.js
+          } 2>&1 | tee research/audit/release/monotone-publication.log
+      - name: Rebuild the complete current manuscript and standalone source bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends latexmk texlive-latex-extra texlive-pictures texlive-fonts-recommended poppler-utils
+          python3 submission/build.py 2>&1 | tee research/audit/release/paper-build.log
+          python3 paper/finalize.py check
+          mkdir -p "$RUNNER_TEMP/standalone-paper"
+          tar -xzf submission/arxiv-source.tar.gz -C "$RUNNER_TEMP/standalone-paper"
+          (cd "$RUNNER_TEMP/standalone-paper" && SOURCE_DATE_EPOCH=1788782400 FORCE_SOURCE_DATE=1 latexmk -g -pdf -interaction=nonstopmode -halt-on-error main.tex)
+          pdftotext -layout paper/main.pdf "$RUNNER_TEMP/current-paper.txt"
+          pdftotext -layout "$RUNNER_TEMP/standalone-paper/main.pdf" "$RUNNER_TEMP/standalone-paper.txt"
+          cmp "$RUNNER_TEMP/current-paper.txt" "$RUNNER_TEMP/standalone-paper.txt"
+      - name: Record distinct verification and publication provenance
+        env:
+          STATE_SPACE_RUN: ${{ runner.temp }}/state-space-published
+        run: python3 release/publish_verified.py record
+      - name: Commit finalized manuscript and unchanged literal audit evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --exit-code -- js witness lean-kernel/Game2048 research/monotone
+          git config user.name 'Dominic Dabish'
+          git config user.email 'ddabish@sdsu.edu'
+          git add paper/main.pdf paper/release.json research/audit/ submission/BUILD.json submission/arxiv-source.tar.gz
+          git diff --cached --check
+          git commit -m 'Finalize Dominic Dabish SDSU preprint, current source bundle, and verified all-opening audit'
+          git push origin HEAD:claude/super-mode-speed-corners-doxfcj
+          python3 release/publish_verified.py bundle
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: Dominic-Dabish-2048-published-${{ github.run_id }}
+          path: |
+            publication/
+            paper/main.log
+            research/audit/
+            ${{ runner.temp }}/state-space-published/
+          if-no-files-found: error
+          retention-days: 90
