@@ -1,0 +1,30 @@
+{
+  "title": "Perfect 2048: Kernel-Verified Optima and Extremal Play",
+  "author": {
+    "name": "Dominic Dabish",
+    "affiliation": "San Diego State University",
+    "email": "ddabish@sdsu.edu"
+  },
+  "pages": 36,
+  "baseline_commit": "1f6b7160b8e79444f35bb69aff0e26b78f6fe535",
+  "source_date_epoch": 1788782400,
+  "build_engine": "pdfTeX 3.141592653-2.6-1.40.25 (TeX Live 2023/Debian)",
+  "pdf_sha256": "da1f7007fd89ff668ea0f0ade88071e46da691f0a254e9ce837d07460721f92f",
+  "source_bundle_sha256": "3b1eff88e10ba6e36e79d1bacd2efe8245c44bc09b54577938874218ad108ec4",
+  "source_sha256": {
+    "main.tex": "a4dd38a3bcd632c2a031501b075490f0c9328c5a8724f1ad4448ec0c3f424a74",
+    "figs.tex": "697931a40181ec20c34acbbda926b0dc5b87d7ccf8875407154160d2c865ea6a",
+    "lean.tex": "93606f42156071d16c2221e6cbfe6f3e71b05e211a5ca50f4fe28ff76cf09912",
+    "deductions.tex": "c0b34eb69bc4d7b11d71f7677afca84b44d4846ece719e74f7e06a3b4265029a",
+    "state-space.tex": "2ddb2e6e5bf61e31d241de08baa3cb3cbabaddc5a1676792d97849d28983870a",
+    "refs.bib": "c627cecc31bf8984cb775398fc78f6b76c0a8f2e064f070e04e204779c122c42",
+    "main.bbl": "3002413bc9d393ca2a4697ca4ad77a14ef5d2bfc550b5aebbe9f137eb9347f80"
+  },
+  "checks": {
+    "latex_build": true,
+    "no_unresolved_references_or_overflow": true,
+    "author_information_present": true,
+    "pdf_author_metadata_correct": true
+  },
+  "scope": "Manuscript compilation and source packaging; not journal submission, peer review, or a Lean rebuild."
+}

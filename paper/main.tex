@@ -39,8 +39,18 @@
 \input{figs}
 
 \title{Perfect 2048:\\ Kernel-Verified Optima and Extremal Play}
-\author{Dom the Developer\\ \small \url{https://github.com/DomTheDeveloper/2048-undo}}
-\date{Draft, September 2026}
+\author{Dominic Dabish\\
+  \small San Diego State University\\
+  \small \href{mailto:ddabish@sdsu.edu}{\texttt{ddabish@sdsu.edu}}}
+\date{Preprint, September 7, 2026}
+\hypersetup{
+  pdftitle={Perfect 2048: Kernel-Verified Optima and Extremal Play},
+  pdfauthor={Dominic Dabish},
+  pdfsubject={Extremal possible play in 2048 and Lean-verified time--mass optima},
+  pdfkeywords={2048, Lean, formal verification, reachability, extremal games},
+  pdfdisplaydoctitle=true,
+  pdflang={en-US}
+}
 
 \begin{document}
 \maketitle
@@ -388,7 +398,8 @@ Attainability is a construction. For $n=11$, Lees-Miller's Markov chain
 \cite{leesmiller2017} exhibits the $519=510+9$ move win on $4\times4$. For
 $n=17$ we generated, verified and ship a $32{,}781$-move line
 (Section~\ref{sec:algorithm}); Table~\ref{tab:exact} shows that the bound
-is attained for every tile on every board up to ten cells---the 2048
+is attained for each relevant tile on each enumerated board up to ten
+cells---the 2048
 tile, for instance, needs exactly $519$ moves on the ten-cell $2\times5$
 board too, where it is the largest tile there is. For the
 largest tile a board can hold, the fastest plays are far more constrained
@@ -1334,6 +1345,9 @@ and a 512 with $6.32\%$ against $2.46\%$. Six directions beat four.
 
 \input{deductions}
 
+\fussy
+\input{state-space}
+
 \section{Open problems}\label{sec:open}
 
 \begin{enumerate}[nosep]
@@ -1369,6 +1383,15 @@ for a fixed prescribed spawn value) is a different optimisation.
 \end{enumerate}
 
 \section*{Reproducibility}
+
+\paragraph{Manuscript and artifact availability.}
+The manuscript, plaintext witnesses, source code, and verification records
+are available in the public repository
+\url{https://github.com/DomTheDeveloper/2048-undo}, on its
+\texttt{gh-pages} branch. The submission source bundle and its build
+manifest are retained under \texttt{submission/}. All results are
+reported with their verification scope; posting this preprint does not
+constitute journal acceptance or external peer review.
 
 \paragraph{Research expansion.}
 Run \texttt{bash research/finish.sh} to rebuild the original certificate,
@@ -1421,9 +1444,6 @@ replay applies to the supplied finite witnesses. Neither constitutes
 peer review of the unformalized arguments or establishes historical
 priority. The proof and experiment sources are provided for independent
 checking.
-
-\fussy
-\input{state-space}
 
 \bibliographystyle{plain}
 \bibliography{refs}
